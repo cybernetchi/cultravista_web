@@ -21,6 +21,8 @@ const buttonVariants = cva(
         glass: "bg-card/60 backdrop-blur-xl border border-border/50 hover:bg-card/80",
         action: "bg-card hover:bg-secondary rounded-xl font-semibold",
         pill: "rounded-full px-6 bg-secondary hover:bg-secondary/80 text-secondary-foreground",
+        capture: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow hover:shadow-glow-lg",
+        captureOutline: "border border-primary text-primary hover:bg-primary/10",
       },
       size: {
         default: "h-10 px-4 py-2",

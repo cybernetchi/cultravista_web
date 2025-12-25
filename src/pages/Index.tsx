@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { MobileFrame } from "@/components/layout/MobileFrame";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { LibraryView } from "@/components/library/LibraryView";
@@ -8,14 +9,22 @@ import { AnnotateView } from "@/components/annotate/AnnotateView";
 import { CaptureView } from "@/components/capture/CaptureView";
 import { ProfileView } from "@/components/profile/ProfileView";
 import { SettingsView } from "@/components/settings/SettingsView";
+import { WebLayout } from "@/components/web/WebLayout";
 import { Scan, ViewMode } from "@/types/scan";
 import { toast } from "sonner";
 
 const Index = () => {
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("library");
   const [viewMode, setViewMode] = useState<ViewMode>("library");
   const [selectedScan, setSelectedScan] = useState<Scan | null>(null);
 
+  // Use web layout for desktop
+  if (!isMobile) {
+    return <WebLayout />;
+  }
+
+  // Mobile layout
   const handleSelectScan = (scan: Scan) => {
     setSelectedScan(scan);
     setViewMode("detail");
@@ -57,7 +66,6 @@ const Index = () => {
   };
 
   const renderMainContent = () => {
-    // Handle capture mode regardless of active tab
     if (viewMode === "capture") {
       return (
         <CaptureView
@@ -67,7 +75,6 @@ const Index = () => {
       );
     }
 
-    // Handle library tab views
     if (activeTab === "library") {
       switch (viewMode) {
         case "detail":
@@ -97,7 +104,6 @@ const Index = () => {
       }
     }
 
-    // Handle other tabs
     if (activeTab === "profile") {
       return <ProfileView />;
     }

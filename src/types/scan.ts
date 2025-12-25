@@ -10,4 +10,4 @@ export interface Scan {
 
 export type ViewMode = 'library' | 'detail' | 'edit' | 'annotate' | 'capture';
 
-export type CaptureState = 'pre' | 'capturing' | 'processing' | 'complete';
+export type CaptureState = 'idle' | 'pre' | 'capturing' | 'processing' | 'complete';
