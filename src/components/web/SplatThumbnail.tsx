@@ -29,36 +29,34 @@ function SplatPreview({ splatUrl }: { splatUrl: string }) {
 }
 
 export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThumbnailProps) {
-  const [hasError, setHasError] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  if (hasError && fallbackImage) {
-    return (
-      <img
-        src={fallbackImage}
-        alt="Scan thumbnail"
-        className={className}
-      />
-    );
-  }
+  const [isHovered, setIsHovered] = useState(false);
 
   return (
-    <div className={`relative ${className}`}>
-      {!isLoaded && fallbackImage && (
+    <div 
+      className={`relative ${className}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Static image - always rendered */}
+      {fallbackImage && (
         <img
           src={fallbackImage}
           alt="Scan thumbnail"
-          className="absolute inset-0 w-full h-full object-cover"
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+            isHovered ? "opacity-0" : "opacity-100"
+          }`}
         />
       )}
-      <Canvas
-        className="!absolute inset-0"
-        gl={{ antialias: true, alpha: true }}
-        onCreated={() => setIsLoaded(true)}
-        onError={() => setHasError(true)}
-      >
-        <SplatPreview splatUrl={splatUrl} />
-      </Canvas>
+      
+      {/* 3D scene - only rendered on hover */}
+      {isHovered && (
+        <Canvas
+          className="!absolute inset-0"
+          gl={{ antialias: true, alpha: true }}
+        >
+          <SplatPreview splatUrl={splatUrl} />
+        </Canvas>
+      )}
     </div>
   );
 }
