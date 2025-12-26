@@ -56,6 +56,7 @@ function SplatPreview({ splatUrl, onCapture }: { splatUrl: string; onCapture?: (
 
 export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThumbnailProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [showSplat, setShowSplat] = useState(false);
   const [cachedThumbnail, setCachedThumbnail] = useState<string | null>(
     () => thumbnailCache.get(splatUrl) || null
   );
@@ -66,31 +67,57 @@ export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThum
     setShouldCapture(false);
   };
 
-  // If no cached thumbnail, we need to render once to capture
-  const showCanvas = isHovered || shouldCapture;
+  // Handle hover transition timing
+  useEffect(() => {
+    if (isHovered) {
+      // Wait 1 second showing gradient, then show splat
+      const timer = setTimeout(() => {
+        setShowSplat(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowSplat(false);
+    }
+  }, [isHovered]);
+
   const displayImage = cachedThumbnail || fallbackImage;
+  const showCanvas = showSplat || shouldCapture;
 
   return (
     <div 
-      className={`relative ${className}`}
+      className={`relative overflow-hidden ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Static image - show cached thumbnail or fallback */}
+      {/* Static image */}
       {displayImage && (
         <img
           src={displayImage}
           alt="Scan thumbnail"
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
             isHovered ? "opacity-0" : "opacity-100"
           }`}
         />
       )}
       
-      {/* 3D scene - render on hover OR when capturing thumbnail */}
+      {/* Green gradient loading state */}
+      <div 
+        className={`absolute inset-0 transition-opacity duration-500 ${
+          isHovered && !showSplat ? "opacity-100" : "opacity-0"
+        }`}
+        style={{
+          background: "linear-gradient(135deg, hsl(110 100% 40%) 0%, hsl(140 100% 35%) 50%, hsl(110 100% 55%) 100%)",
+          backgroundSize: "200% 200%",
+          animation: isHovered && !showSplat ? "gradient-shift 1s ease infinite" : "none",
+        }}
+      />
+      
+      {/* 3D scene */}
       {showCanvas && (
         <Canvas
-          className={`!absolute inset-0 ${shouldCapture && !isHovered ? "opacity-0" : ""}`}
+          className={`!absolute inset-0 transition-opacity duration-500 ${
+            showSplat ? "opacity-100" : "opacity-0"
+          } ${shouldCapture && !showSplat ? "!opacity-0" : ""}`}
           gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }}
         >
           <SplatPreview 
