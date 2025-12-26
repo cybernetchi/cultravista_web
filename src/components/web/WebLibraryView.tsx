@@ -15,12 +15,13 @@ import scan6 from "@/assets/scans/scan-6.jpg";
 const mockScans: Scan[] = [
   {
     id: "1",
-    title: "Al-Habis - Petra, Jordan",
-    author: "Global Digital",
-    authorHandle: "@globaldigital",
+    title: "Friends - GS Demo",
+    author: "CultraVista",
+    authorHandle: "@cultravista",
     thumbnail: scan1,
     createdAt: new Date("2025-07-01"),
-    location: "Petra, Jordan",
+    location: "Studio",
+    splatUrl: "/splats/gs_Friends.splat",
   },
   {
     id: "2",

@@ -10,9 +10,13 @@ import {
   Pencil,
   Star,
   MoreHorizontal,
-  Maximize2
+  Maximize2,
+  Box,
+  Image
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GaussianSplatViewer } from "./GaussianSplatViewer";
+import { useState } from "react";
 
 interface WebDetailPanelProps {
   scan: Scan;
@@ -22,6 +26,8 @@ interface WebDetailPanelProps {
 }
 
 export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailPanelProps) {
+  const [viewMode, setViewMode] = useState<"image" | "3d">(scan.splatUrl ? "3d" : "image");
+  
   const formattedDate = scan.createdAt.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -38,29 +44,63 @@ export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailP
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <h2 className="font-semibold text-foreground">Scan Details</h2>
-        <Button variant="icon" size="icon" onClick={onClose}>
-          <X className="w-5 h-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          {scan.splatUrl && (
+            <div className="flex items-center bg-secondary rounded-lg p-1">
+              <Button
+                variant={viewMode === "3d" ? "default" : "ghost"}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setViewMode("3d")}
+                title="3D View"
+              >
+                <Box className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant={viewMode === "image" ? "default" : "ghost"}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setViewMode("image")}
+                title="Image View"
+              >
+                <Image className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          )}
+          <Button variant="icon" size="icon" onClick={onClose}>
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
 
-      {/* Image preview */}
-      <div className="relative group">
-        <img
-          src={scan.thumbnail}
-          alt={scan.title}
-          className="w-full aspect-video object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
-        
-        {/* Fullscreen button */}
-        <Button
-          variant="glass"
-          size="icon"
-          className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <Maximize2 className="w-4 h-4" />
-        </Button>
-      </div>
+      {/* Preview area */}
+      {viewMode === "3d" && scan.splatUrl ? (
+        <div className="h-[300px]">
+          <GaussianSplatViewer 
+            src={scan.splatUrl} 
+            title={scan.title}
+            className="h-full rounded-none border-0"
+          />
+        </div>
+      ) : (
+        <div className="relative group">
+          <img
+            src={scan.thumbnail}
+            alt={scan.title}
+            className="w-full aspect-video object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
+          
+          {/* Fullscreen button */}
+          <Button
+            variant="glass"
+            size="icon"
+            className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">

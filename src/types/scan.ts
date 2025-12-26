@@ -6,6 +6,7 @@ export interface Scan {
   thumbnail: string;
   createdAt: Date;
   location?: string;
+  splatUrl?: string; // URL to the .splat file for Gaussian Splatting
 }
 
 export type ViewMode = 'library' | 'detail' | 'edit' | 'annotate' | 'capture';
