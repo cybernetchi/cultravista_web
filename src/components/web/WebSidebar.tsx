@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 import { 
   Library, 
-  Camera, 
   User, 
   Settings, 
   Plus,
@@ -14,17 +13,16 @@ import { useState } from "react";
 interface WebSidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  onStartCapture: () => void;
+  onStartCreate: () => void;
 }
 
 const navItems = [
   { id: "library", label: "Library", icon: Library },
-  { id: "capture", label: "Capture", icon: Camera },
   { id: "profile", label: "Profile", icon: User },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-export function WebSidebar({ activeTab, onTabChange, onStartCapture }: WebSidebarProps) {
+export function WebSidebar({ activeTab, onTabChange, onStartCreate }: WebSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -47,7 +45,7 @@ export function WebSidebar({ activeTab, onTabChange, onStartCapture }: WebSideba
         )}
       </div>
 
-      {/* New Capture Button */}
+      {/* New Create Button */}
       <div className="px-4 mb-6">
         <Button
           variant="capture"
@@ -55,10 +53,10 @@ export function WebSidebar({ activeTab, onTabChange, onStartCapture }: WebSideba
             "w-full h-12 gap-2 font-semibold",
             collapsed && "px-0 justify-center"
           )}
-          onClick={onStartCapture}
+          onClick={onStartCreate}
         >
           <Plus className="w-5 h-5" />
-          {!collapsed && <span>New Capture</span>}
+          {!collapsed && <span>Create</span>}
         </Button>
       </div>
 
@@ -72,7 +70,7 @@ export function WebSidebar({ activeTab, onTabChange, onStartCapture }: WebSideba
             return (
               <li key={item.id}>
                 <button
-                  onClick={() => item.id === "capture" ? onStartCapture() : onTabChange(item.id)}
+                  onClick={() => onTabChange(item.id)}
                   className={cn(
                     "w-full flex items-center gap-3 px-4 py-3 rounded-xl",
                     "transition-all duration-200",

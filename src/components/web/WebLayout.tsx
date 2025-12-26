@@ -5,7 +5,7 @@ import { WebLibraryView } from "./WebLibraryView";
 import { WebDetailPanel } from "./WebDetailPanel";
 import { WebEditModal } from "./WebEditModal";
 import { WebAnnotateModal } from "./WebAnnotateModal";
-import { WebCaptureModal } from "./WebCaptureModal";
+import { WebCreateModal } from "./WebCreateModal";
 import { WebProfileView } from "./WebProfileView";
 import { WebSettingsView } from "./WebSettingsView";
 import { Scan, ViewMode } from "@/types/scan";
@@ -28,7 +28,7 @@ export function WebLayout() {
     setViewMode("library");
   };
 
-  const handleStartCapture = () => {
+  const handleStartCreate = () => {
     setViewMode("capture");
   };
 
@@ -37,8 +37,8 @@ export function WebLayout() {
     setViewMode("detail");
   };
 
-  const handleCaptureComplete = () => {
-    toast.success("Scan saved to library!");
+  const handleCreateComplete = () => {
+    toast.success("3D model saved to library!");
     setViewMode("library");
     setSelectedScan(null);
   };
@@ -64,7 +64,7 @@ export function WebLayout() {
       <WebSidebar
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        onStartCapture={handleStartCapture}
+        onStartCreate={handleStartCreate}
       />
 
       {/* Main content */}
@@ -105,9 +105,9 @@ export function WebLayout() {
 
       {/* Modals */}
       {viewMode === "capture" && (
-        <WebCaptureModal
+        <WebCreateModal
           onClose={() => setViewMode("library")}
-          onComplete={handleCaptureComplete}
+          onComplete={handleCreateComplete}
         />
       )}
 
