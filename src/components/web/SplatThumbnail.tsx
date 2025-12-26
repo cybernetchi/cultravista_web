@@ -1,4 +1,4 @@
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, Splat, PerspectiveCamera } from "@react-three/drei";
 
@@ -10,6 +10,25 @@ interface SplatThumbnailProps {
 
 // Cache for captured thumbnails
 const thumbnailCache = new Map<string, string>();
+
+// Queue system to prevent too many WebGL contexts
+const captureQueue: Array<() => void> = [];
+let isProcessingQueue = false;
+
+function processQueue() {
+  if (isProcessingQueue || captureQueue.length === 0) return;
+  isProcessingQueue = true;
+  const next = captureQueue.shift();
+  if (next) {
+    next();
+  }
+}
+
+function finishCapture() {
+  isProcessingQueue = false;
+  // Small delay before processing next to let WebGL context be released
+  setTimeout(processQueue, 100);
+}
 
 function CaptureScene({ splatUrl, onCapture }: { splatUrl: string; onCapture: (dataUrl: string) => void }) {
   const { gl, scene, camera } = useThree();
@@ -24,10 +43,16 @@ function CaptureScene({ splatUrl, onCapture }: { splatUrl: string; onCapture: (d
         const dataUrl = gl.domElement.toDataURL("image/jpeg", 0.8);
         thumbnailCache.set(splatUrl, dataUrl);
         onCapture(dataUrl);
+        finishCapture();
       }
-    }, 1500); // Give time for splat to load
+    }, 2000); // Give more time for splat to load
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (!capturedRef.current) {
+        finishCapture();
+      }
+    };
   }, [gl, scene, camera, splatUrl, onCapture]);
 
   return null;
@@ -59,16 +84,27 @@ export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThum
   const [cachedThumbnail, setCachedThumbnail] = useState<string | null>(
     () => thumbnailCache.get(splatUrl) || null
   );
-  const [shouldCapture, setShouldCapture] = useState(!cachedThumbnail);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [hasRequestedCapture, setHasRequestedCapture] = useState(false);
 
-  const handleCapture = (dataUrl: string) => {
+  const handleCapture = useCallback((dataUrl: string) => {
     setCachedThumbnail(dataUrl);
-    setShouldCapture(false);
-  };
+    setIsCapturing(false);
+  }, []);
 
-  // If no cached thumbnail, we need to render once to capture
-  const showCanvas = isHovered || shouldCapture;
-  const displayImage = cachedThumbnail || fallbackImage;
+  // Queue capture request on mount if not already cached
+  useEffect(() => {
+    if (!cachedThumbnail && !hasRequestedCapture) {
+      setHasRequestedCapture(true);
+      captureQueue.push(() => {
+        setIsCapturing(true);
+      });
+      processQueue();
+    }
+  }, [cachedThumbnail, hasRequestedCapture]);
+
+  // Show canvas when: hovering OR actively capturing
+  const showCanvas = isHovered || isCapturing;
 
   return (
     <div 
@@ -76,10 +112,10 @@ export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThum
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Static image - show cached thumbnail or fallback */}
-      {displayImage && (
+      {/* Static thumbnail - show captured thumbnail */}
+      {cachedThumbnail && (
         <img
-          src={displayImage}
+          src={cachedThumbnail}
           alt="Scan thumbnail"
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
             isHovered ? "opacity-0" : "opacity-100"
@@ -87,15 +123,22 @@ export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThum
         />
       )}
       
+      {/* Loading state - show when waiting to capture or during capture */}
+      {!cachedThumbnail && !showCanvas && (
+        <div className="absolute inset-0 w-full h-full bg-secondary animate-pulse flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      
       {/* 3D scene - render on hover OR when capturing thumbnail */}
       {showCanvas && (
         <Canvas
-          className={`!absolute inset-0 ${shouldCapture && !isHovered ? "opacity-0" : ""}`}
+          className={`!absolute inset-0 ${isCapturing && !isHovered ? "opacity-0 pointer-events-none" : ""}`}
           gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }}
         >
           <SplatPreview 
             splatUrl={splatUrl} 
-            onCapture={shouldCapture ? handleCapture : undefined}
+            onCapture={isCapturing ? handleCapture : undefined}
           />
         </Canvas>
       )}
