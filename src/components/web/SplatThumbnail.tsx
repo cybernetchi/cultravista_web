@@ -1,6 +1,7 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, Splat, PerspectiveCamera } from "@react-three/drei";
+import cubePlaceholder from "@/assets/cube-placeholder.png";
 
 interface SplatThumbnailProps {
   splatUrl: string;
@@ -80,7 +81,8 @@ export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThum
     }
   }, [isHovered]);
 
-  const displayImage = cachedThumbnail || fallbackImage;
+  // Use cached thumbnail, then fallback image, then cube placeholder
+  const displayImage = cachedThumbnail || fallbackImage || cubePlaceholder;
   const showCanvas = showSplat || shouldCapture;
 
   return (
@@ -89,16 +91,14 @@ export function SplatThumbnail({ splatUrl, fallbackImage, className }: SplatThum
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Static image */}
-      {displayImage && (
-        <img
-          src={displayImage}
-          alt="Scan thumbnail"
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-            isHovered ? "opacity-0" : "opacity-100"
-          }`}
-        />
-      )}
+      {/* Static image - always show with cube placeholder as final fallback */}
+      <img
+        src={displayImage}
+        alt="Scan thumbnail"
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
+          isHovered ? "opacity-0" : "opacity-100"
+        }`}
+      />
       
       {/* Green gradient loading state */}
       <div 
