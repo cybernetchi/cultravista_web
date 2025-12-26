@@ -2,6 +2,7 @@ import { Scan } from "@/types/scan";
 import { cn } from "@/lib/utils";
 import { Calendar, MapPin, MoreVertical, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SplatThumbnail } from "./SplatThumbnail";
 
 interface WebScanCardProps {
   scan: Scan;
@@ -17,6 +18,25 @@ export function WebScanCard({ scan, onClick, viewMode, index }: WebScanCardProps
     year: "numeric",
   });
 
+  const renderThumbnail = (className: string) => {
+    if (scan.splatUrl) {
+      return (
+        <SplatThumbnail
+          splatUrl={scan.splatUrl}
+          fallbackImage={scan.thumbnail}
+          className={className}
+        />
+      );
+    }
+    return (
+      <img
+        src={scan.thumbnail}
+        alt={scan.title}
+        className={`${className} object-cover`}
+      />
+    );
+  };
+
   if (viewMode === "list") {
     return (
       <div
@@ -31,12 +51,8 @@ export function WebScanCard({ scan, onClick, viewMode, index }: WebScanCardProps
         style={{ animationDelay: `${index * 50}ms` }}
       >
         {/* Thumbnail */}
-        <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-          <img
-            src={scan.thumbnail}
-            alt={scan.title}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-          />
+        <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 relative">
+          {renderThumbnail("w-full h-full")}
         </div>
 
         {/* Info */}
@@ -61,10 +77,10 @@ export function WebScanCard({ scan, onClick, viewMode, index }: WebScanCardProps
 
         {/* Actions */}
         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button variant="icon" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-8 w-8">
             <Star className="w-4 h-4" />
           </Button>
-          <Button variant="icon" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-8 w-8">
             <MoreVertical className="w-4 h-4" />
           </Button>
         </div>
@@ -85,15 +101,11 @@ export function WebScanCard({ scan, onClick, viewMode, index }: WebScanCardProps
       )}
       style={{ animationDelay: `${index * 50}ms` }}
     >
-      {/* Image */}
-      <div className="aspect-[4/3] overflow-hidden">
-        <img
-          src={scan.thumbnail}
-          alt={scan.title}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-        />
+      {/* Image/Splat */}
+      <div className="aspect-[4/3] overflow-hidden relative">
+        {renderThumbnail("w-full h-full")}
         {/* Overlay gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-transparent pointer-events-none" />
       </div>
 
       {/* Content */}
@@ -109,10 +121,10 @@ export function WebScanCard({ scan, onClick, viewMode, index }: WebScanCardProps
 
       {/* Hover actions */}
       <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="glass" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 bg-background/50 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
           <Star className="w-4 h-4" />
         </Button>
-        <Button variant="glass" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 bg-background/50 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
           <MoreVertical className="w-4 h-4" />
         </Button>
       </div>

@@ -30,6 +30,7 @@ const mockScans: Scan[] = [
     authorHandle: "@tomaa",
     thumbnail: scan2,
     createdAt: new Date("2025-06-28"),
+    splatUrl: "/splats/gs_Friends.splat",
   },
   {
     id: "3",
@@ -38,6 +39,7 @@ const mockScans: Scan[] = [
     authorHandle: "@globaldigital",
     thumbnail: scan3,
     createdAt: new Date("2025-06-25"),
+    splatUrl: "/splats/gs_Friends.splat",
   },
   {
     id: "4",
@@ -46,6 +48,7 @@ const mockScans: Scan[] = [
     authorHandle: "@tomaa",
     thumbnail: scan4,
     createdAt: new Date("2025-06-20"),
+    splatUrl: "/splats/gs_Friends.splat",
   },
   {
     id: "5",
@@ -54,6 +57,7 @@ const mockScans: Scan[] = [
     authorHandle: "@globaldigital",
     thumbnail: scan5,
     createdAt: new Date("2025-06-15"),
+    splatUrl: "/splats/gs_Friends.splat",
   },
   {
     id: "6",
@@ -62,6 +66,7 @@ const mockScans: Scan[] = [
     authorHandle: "@tomaa",
     thumbnail: scan6,
     createdAt: new Date("2025-06-10"),
+    splatUrl: "/splats/gs_Friends.splat",
   },
 ];
 

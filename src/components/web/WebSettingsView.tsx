@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { 
   Bell, 
   Moon, 
+  Sun,
   Wifi, 
   HardDrive, 
   Shield, 
@@ -13,41 +14,51 @@ import {
   Globe
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-
-const settingsGroups = [
-  {
-    title: "Account",
-    items: [
-      { id: "profile", icon: User, label: "Profile Settings", type: "link" },
-      { id: "subscription", icon: CreditCard, label: "Subscription", type: "link" },
-    ],
-  },
-  {
-    title: "Preferences",
-    items: [
-      { id: "notifications", icon: Bell, label: "Notifications", type: "toggle", defaultValue: true },
-      { id: "darkMode", icon: Moon, label: "Dark Mode", type: "toggle", defaultValue: true },
-      { id: "offline", icon: Wifi, label: "Offline Mode", type: "toggle", defaultValue: false },
-      { id: "language", icon: Globe, label: "Language", type: "link", value: "English" },
-    ],
-  },
-  {
-    title: "Storage & Data",
-    items: [
-      { id: "storage", icon: HardDrive, label: "Storage Management", type: "link", value: "2.4 GB used" },
-      { id: "privacy", icon: Shield, label: "Privacy & Security", type: "link" },
-    ],
-  },
-  {
-    title: "Support",
-    items: [
-      { id: "help", icon: HelpCircle, label: "Help & Support", type: "link" },
-      { id: "about", icon: Info, label: "About CultraVista", type: "link", value: "v1.0.0" },
-    ],
-  },
-];
+import { useTheme } from "@/components/ThemeProvider";
 
 export function WebSettingsView() {
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  const settingsGroups = [
+    {
+      title: "Account",
+      items: [
+        { id: "profile", icon: User, label: "Profile Settings", type: "link" as const },
+        { id: "subscription", icon: CreditCard, label: "Subscription", type: "link" as const },
+      ],
+    },
+    {
+      title: "Preferences",
+      items: [
+        { id: "notifications", icon: Bell, label: "Notifications", type: "toggle" as const, defaultValue: true },
+        { id: "darkMode", icon: isDark ? Moon : Sun, label: "Dark Mode", type: "toggle" as const, defaultValue: isDark },
+        { id: "offline", icon: Wifi, label: "Offline Mode", type: "toggle" as const, defaultValue: false },
+        { id: "language", icon: Globe, label: "Language", type: "link" as const, value: "English" },
+      ],
+    },
+    {
+      title: "Storage & Data",
+      items: [
+        { id: "storage", icon: HardDrive, label: "Storage Management", type: "link" as const, value: "2.4 GB used" },
+        { id: "privacy", icon: Shield, label: "Privacy & Security", type: "link" as const },
+      ],
+    },
+    {
+      title: "Support",
+      items: [
+        { id: "help", icon: HelpCircle, label: "Help & Support", type: "link" as const },
+        { id: "about", icon: Info, label: "About CultraVista", type: "link" as const, value: "v1.0.0" },
+      ],
+    },
+  ];
+
+  const handleToggle = (id: string, checked: boolean) => {
+    if (id === "darkMode") {
+      setTheme(checked ? "dark" : "light");
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto py-8">
       <div className="max-w-2xl mx-auto px-8">
@@ -77,7 +88,10 @@ export function WebSettingsView() {
                       <span className="flex-1 text-foreground font-medium">{item.label}</span>
                       
                       {item.type === "toggle" && (
-                        <Switch defaultChecked={item.defaultValue} />
+                        <Switch 
+                          defaultChecked={item.defaultValue} 
+                          onCheckedChange={(checked) => handleToggle(item.id, checked)}
+                        />
                       )}
                       {item.type === "link" && (
                         <div className="flex items-center gap-2 text-muted-foreground">
