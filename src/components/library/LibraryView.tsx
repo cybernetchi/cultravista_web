@@ -5,7 +5,12 @@ import { ScanCard } from "./ScanCard";
 import { Scan } from "@/types/scan";
 import { cn } from "@/lib/utils";
 
-import cubeLight from "@/assets/scans/cube-light.png";
+import scan1 from "@/assets/scans/scan-1.jpg";
+import scan2 from "@/assets/scans/scan-2.jpg";
+import scan3 from "@/assets/scans/scan-3.jpg";
+import scan4 from "@/assets/scans/scan-4.jpg";
+import scan5 from "@/assets/scans/scan-5.jpg";
+import scan6 from "@/assets/scans/scan-6.jpg";
 
 const mockScans: Scan[] = [
   {
@@ -13,7 +18,7 @@ const mockScans: Scan[] = [
     title: "Al-Habis - Petra, Jordan",
     author: "Global Digital",
     authorHandle: "@globaldigital",
-    thumbnail: cubeLight,
+    thumbnail: scan1,
     createdAt: new Date("2025-07-01"),
     location: "Petra, Jordan",
   },
@@ -22,7 +27,7 @@ const mockScans: Scan[] = [
     title: "Baby Yoda",
     author: "Tomaa",
     authorHandle: "@tomaa",
-    thumbnail: cubeLight,
+    thumbnail: scan2,
     createdAt: new Date("2025-06-28"),
   },
   {
@@ -30,7 +35,7 @@ const mockScans: Scan[] = [
     title: "Droughdool Mote",
     author: "Global Digital",
     authorHandle: "@globaldigital",
-    thumbnail: cubeLight,
+    thumbnail: scan3,
     createdAt: new Date("2025-06-25"),
   },
   {
@@ -38,7 +43,7 @@ const mockScans: Scan[] = [
     title: "Marble Head Sculpture",
     author: "Tomaa",
     authorHandle: "@tomaa",
-    thumbnail: cubeLight,
+    thumbnail: scan4,
     createdAt: new Date("2025-06-20"),
   },
   {
@@ -46,7 +51,7 @@ const mockScans: Scan[] = [
     title: "San Francisco Vista",
     author: "Global Digital",
     authorHandle: "@globaldigital",
-    thumbnail: cubeLight,
+    thumbnail: scan5,
     createdAt: new Date("2025-06-15"),
   },
   {
@@ -54,7 +59,7 @@ const mockScans: Scan[] = [
     title: "Ancient Artifact",
     author: "Tomaa",
     authorHandle: "@tomaa",
-    thumbnail: cubeLight,
+    thumbnail: scan6,
     createdAt: new Date("2025-06-10"),
   },
 ];

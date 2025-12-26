@@ -2,13 +2,15 @@ import { cn } from "@/lib/utils";
 import { Camera, Settings, ExternalLink, Grid, Star, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-import cubeLight from "@/assets/scans/cube-light.png";
+import scan1 from "@/assets/scans/scan-1.jpg";
+import scan2 from "@/assets/scans/scan-2.jpg";
+import scan3 from "@/assets/scans/scan-3.jpg";
 
 export function WebProfileView() {
   const userScans = [
-    { id: "1", thumbnail: cubeLight, title: "Al-Habis" },
-    { id: "2", thumbnail: cubeLight, title: "Baby Yoda" },
-    { id: "3", thumbnail: cubeLight, title: "Droughdool Mote" },
+    { id: "1", thumbnail: scan1, title: "Al-Habis" },
+    { id: "2", thumbnail: scan2, title: "Baby Yoda" },
+    { id: "3", thumbnail: scan3, title: "Droughdool Mote" },
   ];
 
   return (
