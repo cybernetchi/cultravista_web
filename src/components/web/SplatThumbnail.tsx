@@ -14,9 +14,10 @@ function SplatPreview({ splatUrl }: { splatUrl: string }) {
       <PerspectiveCamera makeDefault position={[0, 0.5, 3]} fov={45} />
       <OrbitControls 
         enableZoom={false} 
-        enablePan={false} 
+        enablePan={false}
+        enableRotate={false}
         autoRotate 
-        autoRotateSpeed={2}
+        autoRotateSpeed={0.5}
       />
       <ambientLight intensity={0.8} />
       <directionalLight position={[5, 5, 5]} intensity={0.5} />
