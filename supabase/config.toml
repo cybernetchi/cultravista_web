@@ -1,1 +1,16 @@
 project_id = "zlzzjcvgkbwuaaizzrjv"
+
+[functions.kiri-token]
+verify_jwt = false
+
+[functions.kiri-status]
+verify_jwt = false
+
+[functions.kiri-model-zip]
+verify_jwt = false
+
+[functions.ply-to-splat]
+verify_jwt = false
+
+[functions.s3-upload]
+verify_jwt = false
