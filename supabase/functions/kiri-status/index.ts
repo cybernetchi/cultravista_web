@@ -28,16 +28,22 @@ serve(async (req) => {
     }
 
     // Get status from KIRI API
-    const statusUrl = new URL(`${KIRI_API_BASE}/api/v1/open/3dgs/getStatus`);
+    const statusUrl = new URL(`${KIRI_API_BASE}/api/v1/open/model/getStatus`);
     statusUrl.searchParams.append('serialize', serialize);
-    statusUrl.searchParams.append('token', KIRI_API_KEY);
 
     const response = await fetch(statusUrl.toString(), {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${KIRI_API_KEY}`,
+      },
     });
 
-    const data = await response.json();
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`KIRI API error: ${response.status} ${response.statusText}`);
+    }
 
+    const data = await response.json();
     return new Response(
       JSON.stringify(data),
       {

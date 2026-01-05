@@ -28,16 +28,22 @@ serve(async (req) => {
     }
 
     // Get model zip URL from KIRI API
-    const zipUrl = new URL(`${KIRI_API_BASE}/api/v1/open/3dgs/getModelZip`);
+    const zipUrl = new URL(`${KIRI_API_BASE}/api/v1/open/model/getModelZip`);
     zipUrl.searchParams.append('serialize', serialize);
-    zipUrl.searchParams.append('token', KIRI_API_KEY);
 
     const response = await fetch(zipUrl.toString(), {
       method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${KIRI_API_KEY}`,
+      },
     });
 
-    const data = await response.json();
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`KIRI API error: ${response.status} ${response.statusText}`);
+    }
 
+    const data = await response.json();
     return new Response(
       JSON.stringify(data),
       {
