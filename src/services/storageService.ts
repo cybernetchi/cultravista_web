@@ -1,5 +1,5 @@
 // Storage service using Supabase Storage for file uploads
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 interface UploadResult {
   success: boolean;
