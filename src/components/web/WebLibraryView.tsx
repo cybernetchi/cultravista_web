@@ -1,74 +1,24 @@
 import { useState } from "react";
-import { Grid, List, Filter, SortAsc } from "lucide-react";
+import { Grid, List, Filter, SortAsc, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { WebScanCard } from "./WebScanCard";
 import { Scan } from "@/types/scan";
+import { CaptureService, Capture } from "@/services/captureService";
 import { cn } from "@/lib/utils";
 
-import scan1 from "@/assets/scans/scan-1.jpg";
-import scan2 from "@/assets/scans/scan-2.jpg";
-import scan3 from "@/assets/scans/scan-3.jpg";
-import scan4 from "@/assets/scans/scan-4.jpg";
-import scan5 from "@/assets/scans/scan-5.jpg";
-import scan6 from "@/assets/scans/scan-6.jpg";
-
-const mockScans: Scan[] = [
-  {
-    id: "1",
-    title: "Friends - GS Demo",
-    author: "CultraVista",
-    authorHandle: "@cultravista",
-    thumbnail: scan1,
-    createdAt: new Date("2025-07-01"),
-    location: "Studio",
-    splatUrl: "/splats/gs_Friends.splat",
-  },
-  {
-    id: "2",
-    title: "Baby Yoda",
-    author: "Tomaa",
-    authorHandle: "@tomaa",
-    thumbnail: scan2,
-    createdAt: new Date("2025-06-28"),
-    splatUrl: "/splats/gs_Friends.splat",
-  },
-  {
-    id: "3",
-    title: "Droughdool Mote",
-    author: "Global Digital",
-    authorHandle: "@globaldigital",
-    thumbnail: scan3,
-    createdAt: new Date("2025-06-25"),
-    splatUrl: "/splats/gs_Friends.splat",
-  },
-  {
-    id: "4",
-    title: "Marble Head Sculpture",
-    author: "Tomaa",
-    authorHandle: "@tomaa",
-    thumbnail: scan4,
-    createdAt: new Date("2025-06-20"),
-    splatUrl: "/splats/gs_Friends.splat",
-  },
-  {
-    id: "5",
-    title: "San Francisco Vista",
-    author: "Global Digital",
-    authorHandle: "@globaldigital",
-    thumbnail: scan5,
-    createdAt: new Date("2025-06-15"),
-    splatUrl: "/splats/gs_Friends.splat",
-  },
-  {
-    id: "6",
-    title: "Ancient Artifact",
-    author: "Tomaa",
-    authorHandle: "@tomaa",
-    thumbnail: scan6,
-    createdAt: new Date("2025-06-10"),
-    splatUrl: "/splats/gs_Friends.splat",
-  },
-];
+// Convert database capture to Scan type
+function captureToScan(capture: Capture): Scan {
+  return {
+    id: capture.id,
+    title: capture.title,
+    author: "User",
+    authorHandle: "@user",
+    thumbnail: capture.thumbnail || "/placeholder.svg",
+    createdAt: new Date(capture.created_at),
+    splatUrl: capture.file || undefined,
+  };
+}
 
 interface WebLibraryViewProps {
   onSelectScan: (scan: Scan) => void;
@@ -78,10 +28,39 @@ interface WebLibraryViewProps {
 export function WebLibraryView({ onSelectScan, searchQuery }: WebLibraryViewProps) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
-  const filteredScans = mockScans.filter(scan =>
+  const { data: captures, isLoading, error } = useQuery({
+    queryKey: ['captures'],
+    queryFn: async () => {
+      const result = await CaptureService.getAllCaptures();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch captures');
+      }
+      return result.data || [];
+    },
+  });
+
+  const scans = captures?.map(captureToScan) || [];
+
+  const filteredScans = scans.filter(scan =>
     scan.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     scan.authorHandle.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-destructive">Failed to load scans</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -126,22 +105,29 @@ export function WebLibraryView({ onSelectScan, searchQuery }: WebLibraryViewProp
 
       {/* Grid/List */}
       <div className="flex-1 px-8 pb-8 overflow-y-auto">
-        <div className={cn(
-          "grid gap-5",
-          viewMode === "grid" 
-            ? "grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" 
-            : "grid-cols-1"
-        )}>
-          {filteredScans.map((scan, index) => (
-            <WebScanCard
-              key={scan.id}
-              scan={scan}
-              onClick={() => onSelectScan(scan)}
-              viewMode={viewMode}
-              index={index}
-            />
-          ))}
-        </div>
+        {filteredScans.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <p>No scans found</p>
+            <p className="text-sm">Create a new scan to get started</p>
+          </div>
+        ) : (
+          <div className={cn(
+            "grid gap-5",
+            viewMode === "grid" 
+              ? "grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" 
+              : "grid-cols-1"
+          )}>
+            {filteredScans.map((scan, index) => (
+              <WebScanCard
+                key={scan.id}
+                scan={scan}
+                onClick={() => onSelectScan(scan)}
+                viewMode={viewMode}
+                index={index}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
