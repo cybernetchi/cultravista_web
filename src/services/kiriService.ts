@@ -138,7 +138,7 @@ export class KiriService {
   }
 
   // Convert PLY to Splat via AWS Lambda (through Supabase Edge Function)
-  static async convertPlyToSplat(s3Url: string): Promise<{ success: boolean; data?: { splat_url?: string }; error?: string }> {
+  static async convertPlyToSplat(s3Url: string): Promise<{ success: boolean; data?: { splat_url?: string; output_url?: string; url?: string }; error?: string }> {
     try {
       const { data, error } = await supabase.functions.invoke('ply-to-splat', {
         body: { s3_url: s3Url }
