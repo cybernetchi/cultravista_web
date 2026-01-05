@@ -229,20 +229,9 @@ export const useProcessingFlow = (
 
   // Poll KIRI status
   const statusQuery = useKiriStatus(serialize || '', enabled && !!serialize);
-  
-  // Auto-trigger conversion when status becomes complete (1)
-  React.useEffect(() => {
-    const status = statusQuery.data?.status;
-    
-    if (status === 1 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending) {
-      // Status is complete, auto-trigger conversion
-      console.log('KIRI processing complete (status=1), triggering Lambda conversion:', serialize);
-      triggerConversion();
-    }
-  }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending, triggerConversion]);
 
-  // When status becomes complete (1), trigger the conversion flow
-  const triggerConversion = async () => {
+  // Define triggerConversion with useCallback BEFORE the useEffect
+  const triggerConversion = React.useCallback(async () => {
     if (!serialize || !captureId) return;
 
     try {
@@ -268,7 +257,18 @@ export const useProcessingFlow = (
       }
       throw error;
     }
-  };
+  }, [serialize, captureId, getModelZip, convertToSplat, queryClient]);
+  
+  // Auto-trigger conversion when status becomes complete (1)
+  React.useEffect(() => {
+    const status = statusQuery.data?.status;
+    
+    if (status === 1 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending) {
+      // Status is complete, auto-trigger conversion
+      console.log('KIRI processing complete (status=1), triggering Lambda conversion:', serialize);
+      triggerConversion();
+    }
+  }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending, triggerConversion]);
 
   return {
     status: statusQuery.data?.status,
