@@ -1,6 +1,6 @@
 // Supabase Edge Function for AWS S3 uploads
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.400.0";
+import { S3Client, PutObjectCommand } from "npm:@aws-sdk/client-s3@3.400.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
