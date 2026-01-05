@@ -3,8 +3,12 @@ import { cn } from "@/lib/utils";
 import { X, Upload, Film, Images, Check, FileVideo, Image as ImageIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useKiriUpload } from "@/hooks/useCapture";
+import { toast } from "sonner";
 
-type CreateState = "idle" | "uploading" | "processing" | "complete";
+type CreateState = "idle" | "uploading" | "processing" | "complete" | "error";
 
 interface UploadedFile {
   file: File;
@@ -22,7 +26,11 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
   const [progress, setProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const kiriUploadMutation = useKiriUpload();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -77,33 +85,39 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
     });
   };
 
-  const handleStartProcessing = () => {
+  const handleStartProcessing = async () => {
+    if (uploadedFiles.length === 0) return;
+    if (!title.trim()) {
+      setError("Please enter a title for your model");
+      return;
+    }
+
     setCreateState("uploading");
-    
-    // Simulate upload
-    let uploadProgress = 0;
-    const uploadInterval = setInterval(() => {
-      uploadProgress += 5;
-      setProgress(uploadProgress);
+    setProgress(0);
+    setError(null);
+
+    try {
+      const files = uploadedFiles.map(f => f.file);
       
-      if (uploadProgress >= 100) {
-        clearInterval(uploadInterval);
-        setCreateState("processing");
-        setProgress(0);
-        
-        // Simulate processing
-        let processProgress = 0;
-        const processInterval = setInterval(() => {
-          processProgress += 2;
-          setProgress(processProgress);
-          
-          if (processProgress >= 100) {
-            clearInterval(processInterval);
-            setCreateState("complete");
+      await kiriUploadMutation.mutateAsync({
+        files,
+        title,
+        onProgress: (prog) => {
+          setProgress(prog);
+          if (prog >= 80) {
+            setCreateState("processing");
           }
-        }, 80);
-      }
-    }, 50);
+        },
+      });
+
+      setCreateState("complete");
+      toast.success("3D model created successfully!");
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError(err instanceof Error ? err.message : "Upload failed");
+      setCreateState("error");
+      toast.error("Upload failed. Please try again.");
+    }
   };
 
   const handleReset = () => {
@@ -111,6 +125,8 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
     setUploadedFiles([]);
     setCreateState("idle");
     setProgress(0);
+    setTitle("");
+    setError(null);
   };
 
   const videoCount = uploadedFiles.filter((f) => f.type === "video").length;
@@ -148,6 +164,21 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
               View and interact with your 3D model in the library
             </li>
           </ul>
+
+          <div className="pt-4 border-t border-border">
+            <Label htmlFor="model-title" className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
+              Model Title
+            </Label>
+            <Input
+              id="model-title"
+              type="text"
+              placeholder="Enter a name for your 3D model"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={createState !== "idle"}
+              className="mb-4"
+            />
+          </div>
 
           <div className="pt-4 border-t border-border">
             <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Supported formats</h4>
@@ -189,6 +220,17 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
                   <span className="text-sm text-primary font-medium">3D Model Ready!</span>
                 </>
               )}
+              {createState === "error" && (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-2">
+                    <X className="w-6 h-6 text-destructive" />
+                  </div>
+                  <span className="text-sm text-destructive font-medium">Upload Failed</span>
+                  {error && (
+                    <span className="text-xs text-muted-foreground mt-1 block">{error}</span>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -214,6 +256,17 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
               </Button>
               <Button variant="ghost" className="w-full gap-2" onClick={handleReset}>
                 Create Another
+              </Button>
+            </div>
+          )}
+          {createState === "error" && (
+            <div className="space-y-3">
+              <Button variant="capture" className="w-full gap-2" onClick={handleStartProcessing}>
+                <Upload className="w-4 h-4" />
+                Try Again
+              </Button>
+              <Button variant="ghost" className="w-full gap-2" onClick={handleReset}>
+                Start Over
               </Button>
             </div>
           )}
