@@ -1,68 +1,24 @@
 import { useState } from "react";
-import { Search, Grid, List, Plus } from "lucide-react";
+import { Search, Grid, List, Plus, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScanCard } from "./ScanCard";
 import { Scan } from "@/types/scan";
+import { CaptureService, Capture } from "@/services/captureService";
 import { cn } from "@/lib/utils";
 
-import scan1 from "@/assets/scans/scan-1.jpg";
-import scan2 from "@/assets/scans/scan-2.jpg";
-import scan3 from "@/assets/scans/scan-3.jpg";
-import scan4 from "@/assets/scans/scan-4.jpg";
-import scan5 from "@/assets/scans/scan-5.jpg";
-import scan6 from "@/assets/scans/scan-6.jpg";
-
-const mockScans: Scan[] = [
-  {
-    id: "1",
-    title: "Al-Habis - Petra, Jordan",
-    author: "Global Digital",
-    authorHandle: "@globaldigital",
-    thumbnail: scan1,
-    createdAt: new Date("2025-07-01"),
-    location: "Petra, Jordan",
-  },
-  {
-    id: "2",
-    title: "Baby Yoda",
-    author: "Tomaa",
-    authorHandle: "@tomaa",
-    thumbnail: scan2,
-    createdAt: new Date("2025-06-28"),
-  },
-  {
-    id: "3",
-    title: "Droughdool Mote",
-    author: "Global Digital",
-    authorHandle: "@globaldigital",
-    thumbnail: scan3,
-    createdAt: new Date("2025-06-25"),
-  },
-  {
-    id: "4",
-    title: "Marble Head Sculpture",
-    author: "Tomaa",
-    authorHandle: "@tomaa",
-    thumbnail: scan4,
-    createdAt: new Date("2025-06-20"),
-  },
-  {
-    id: "5",
-    title: "San Francisco Vista",
-    author: "Global Digital",
-    authorHandle: "@globaldigital",
-    thumbnail: scan5,
-    createdAt: new Date("2025-06-15"),
-  },
-  {
-    id: "6",
-    title: "Ancient Artifact",
-    author: "Tomaa",
-    authorHandle: "@tomaa",
-    thumbnail: scan6,
-    createdAt: new Date("2025-06-10"),
-  },
-];
+// Convert database capture to Scan type
+function captureToScan(capture: Capture): Scan {
+  return {
+    id: capture.id,
+    title: capture.title,
+    author: "User",
+    authorHandle: "@user",
+    thumbnail: capture.thumbnail || "/placeholder.svg",
+    createdAt: new Date(capture.created_at),
+    splatUrl: capture.file || undefined,
+  };
+}
 
 interface LibraryViewProps {
   onSelectScan: (scan: Scan) => void;
@@ -73,7 +29,20 @@ export function LibraryView({ onSelectScan, onStartCapture }: LibraryViewProps) 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredScans = mockScans.filter(scan =>
+  const { data: captures, isLoading, error } = useQuery({
+    queryKey: ['captures'],
+    queryFn: async () => {
+      const result = await CaptureService.getAllCaptures();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch captures');
+      }
+      return result.data || [];
+    },
+  });
+
+  const scans = captures?.map(captureToScan) || [];
+
+  const filteredScans = scans.filter(scan =>
     scan.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     scan.authorHandle.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -116,19 +85,34 @@ export function LibraryView({ onSelectScan, onStartCapture }: LibraryViewProps) 
 
       {/* Grid */}
       <div className="flex-1 px-5 overflow-y-auto">
-        <div className={cn(
-          "grid gap-3",
-          viewMode === "grid" ? "grid-cols-2" : "grid-cols-1"
-        )}>
-          {filteredScans.map((scan, index) => (
-            <ScanCard
-              key={scan.id}
-              scan={scan}
-              onClick={() => onSelectScan(scan)}
-              index={index}
-            />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex items-center justify-center h-32">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-32">
+            <p className="text-destructive">Failed to load scans</p>
+          </div>
+        ) : filteredScans.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+            <p>No scans found</p>
+            <p className="text-sm">Create a new scan to get started</p>
+          </div>
+        ) : (
+          <div className={cn(
+            "grid gap-3",
+            viewMode === "grid" ? "grid-cols-2" : "grid-cols-1"
+          )}>
+            {filteredScans.map((scan, index) => (
+              <ScanCard
+                key={scan.id}
+                scan={scan}
+                onClick={() => onSelectScan(scan)}
+                index={index}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Floating action button */}
