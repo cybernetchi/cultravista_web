@@ -1,11 +1,11 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { X, Upload, Film, Images, Check, FileVideo, Image as ImageIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useKiriUpload } from "@/hooks/useCapture";
+import { useKiriUpload, useProcessingFlow } from "@/hooks/useCapture";
 import { toast } from "sonner";
 
 type CreateState = "idle" | "uploading" | "processing" | "complete" | "error";
@@ -28,9 +28,27 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [serialize, setSerialize] = useState<string | null>(null);
+  const [captureId, setCaptureId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const kiriUploadMutation = useKiriUpload();
+  
+  // Use processing flow for auto Lambda trigger
+  const {
+    status: processingStatus,
+    isComplete: processingComplete,
+    isConverting,
+  } = useProcessingFlow(serialize, captureId, createState === "processing");
+
+  // Handle completion of entire flow (KIRI + Lambda)
+  useEffect(() => {
+    if (processingComplete && !isConverting && createState === "processing") {
+      setCreateState("complete");
+      toast.success("3D model created successfully!");
+      console.log("Full processing complete - KIRI + Lambda done");
+    }
+  }, [processingComplete, isConverting, createState]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -99,7 +117,7 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
     try {
       const files = uploadedFiles.map(f => f.file);
       
-      await kiriUploadMutation.mutateAsync({
+      const result = await kiriUploadMutation.mutateAsync({
         files,
         title,
         onProgress: (prog) => {
@@ -110,8 +128,12 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
         },
       });
 
-      setCreateState("complete");
-      toast.success("3D model created successfully!");
+      // Store serialize and captureId for processing flow
+      setSerialize(result.serialize);
+      setCaptureId(result.captureId);
+      setCreateState("processing");
+      
+      console.log("Upload complete, processing will auto-trigger:", result);
     } catch (err) {
       console.error("Upload error:", err);
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -127,6 +149,8 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
     setProgress(0);
     setTitle("");
     setError(null);
+    setSerialize(null);
+    setCaptureId(null);
   };
 
   const videoCount = uploadedFiles.filter((f) => f.type === "video").length;

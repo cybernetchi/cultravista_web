@@ -170,7 +170,7 @@ export const useKiriStatus = (serialize: string, enabled: boolean = true) => {
     refetchInterval: (query) => {
       // Stop polling if completed or failed
       const status = query.state.data?.status;
-      // KIRI status: 0=processing, 1=complete, 2=failed
+      // KIRI status: 0=processing, 1=complete, 2=failed (corrected)
       return status === 1 || status === 2 ? false : 5000;
     },
   });
@@ -236,10 +236,10 @@ export const useProcessingFlow = (
     
     if (status === 1 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending) {
       // Status is complete, auto-trigger conversion
-      console.log('KIRI processing complete, triggering Lambda conversion:', serialize);
+      console.log('KIRI processing complete (status=1), triggering Lambda conversion:', serialize);
       triggerConversion();
     }
-  }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending]);
+  }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending, triggerConversion]);
 
   // When status becomes complete (1), trigger the conversion flow
   const triggerConversion = async () => {
