@@ -174,3 +174,98 @@ export const useKiriStatus = (serialize: string, enabled: boolean = true) => {
     },
   });
 };
+
+// Get model zip URL hook
+export const useGetModelZip = () => {
+  return useMutation({
+    mutationFn: async (serialize: string) => {
+      const result = await KiriService.getModelZip(serialize);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      return result.data;
+    },
+  });
+};
+
+// PLY to Splat conversion hook (triggers AWS Lambda)
+export const usePlyToSplatConversion = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ s3Url, captureId }: { s3Url: string; captureId: string }) => {
+      // Call Lambda via Edge Function
+      const result = await KiriService.convertPlyToSplat(s3Url);
+      if (!result.success) {
+        throw new Error(result.error || 'PLY conversion failed');
+      }
+
+      // Update capture with the splat URL if conversion succeeded
+      if (result.data?.splat_url) {
+        await CaptureService.updateCapture(captureId, {
+          file: result.data.splat_url,
+          status: 1, // Complete
+        });
+      }
+
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['captures'] });
+    },
+  });
+};
+
+// Complete processing flow hook - handles status polling and Lambda trigger
+export const useProcessingFlow = (
+  serialize: string | null,
+  captureId: string | null,
+  enabled: boolean = true
+) => {
+  const queryClient = useQueryClient();
+  const getModelZip = useGetModelZip();
+  const convertToSplat = usePlyToSplatConversion();
+
+  // Poll KIRI status
+  const statusQuery = useKiriStatus(serialize || '', enabled && !!serialize);
+
+  // When status becomes complete (1), trigger the conversion flow
+  const triggerConversion = async () => {
+    if (!serialize || !captureId) return;
+
+    try {
+      // Step 1: Get the model zip URL from KIRI
+      const modelData = await getModelZip.mutateAsync(serialize);
+      
+      if (!modelData?.splatUrl) {
+        throw new Error('No model URL returned from KIRI');
+      }
+
+      // Step 2: Trigger Lambda conversion
+      await convertToSplat.mutateAsync({
+        s3Url: modelData.splatUrl,
+        captureId,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['captures'] });
+    } catch (error) {
+      console.error('Conversion flow failed:', error);
+      // Update status to failed
+      if (captureId) {
+        await CaptureService.updateCapture(captureId, { status: 2 });
+      }
+      throw error;
+    }
+  };
+
+  return {
+    status: statusQuery.data?.status,
+    progress: statusQuery.data?.progress,
+    isPolling: statusQuery.isFetching,
+    isComplete: statusQuery.data?.status === 1,
+    isFailed: statusQuery.data?.status === 2,
+    isConverting: getModelZip.isPending || convertToSplat.isPending,
+    conversionError: getModelZip.error || convertToSplat.error,
+    triggerConversion,
+  };
+};

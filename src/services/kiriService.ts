@@ -136,4 +136,26 @@ export class KiriService {
       };
     }
   }
+
+  // Convert PLY to Splat via AWS Lambda (through Supabase Edge Function)
+  static async convertPlyToSplat(s3Url: string): Promise<{ success: boolean; data?: { splat_url?: string }; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('ply-to-splat', {
+        body: { s3_url: s3Url }
+      });
+
+      if (error) {
+        console.error('Error converting PLY to Splat:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, data };
+    } catch (error) {
+      console.error('Error converting PLY to Splat:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to convert PLY',
+      };
+    }
+  }
 }
