@@ -195,18 +195,37 @@ export const usePlyToSplatConversion = () => {
 
   return useMutation({
     mutationFn: async ({ s3Url, captureId }: { s3Url: string; captureId: string }) => {
+      console.log('Starting PLY to Splat conversion:', { s3Url, captureId });
+      
       // Call Lambda via Edge Function
       const result = await KiriService.convertPlyToSplat(s3Url);
+      console.log('Lambda conversion result:', result);
+      
       if (!result.success) {
         throw new Error(result.error || 'PLY conversion failed');
       }
 
+      // Lambda returns splat_url in the response
+      // Check for various possible key names from Lambda
+      const splatUrl = result.data?.splat_url || result.data?.output_url || result.data?.url;
+      console.log('Extracted splat URL:', splatUrl);
+
       // Update capture with the splat URL if conversion succeeded
-      if (result.data?.splat_url) {
-        await CaptureService.updateCapture(captureId, {
-          file: result.data.splat_url,
+      if (splatUrl) {
+        console.log('Updating capture with splat URL:', { captureId, splatUrl });
+        const updateResult = await CaptureService.updateCapture(captureId, {
+          file: splatUrl,
           status: 1, // Complete
         });
+        console.log('Capture update result:', updateResult);
+        
+        if (!updateResult.success) {
+          console.error('Failed to update capture:', updateResult.error);
+          throw new Error(updateResult.error || 'Failed to update capture');
+        }
+      } else {
+        console.warn('No splat URL in Lambda response, marking as failed');
+        await CaptureService.updateCapture(captureId, { status: 2 }); // Failed
       }
 
       return result.data;
