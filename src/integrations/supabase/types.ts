@@ -14,7 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      captures: {
+        Row: {
+          created_at: string
+          file: string | null
+          folder_path: string | null
+          id: string
+          serialize: string | null
+          status: number
+          thumbnail: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          file?: string | null
+          folder_path?: string | null
+          id?: string
+          serialize?: string | null
+          status?: number
+          thumbnail?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          file?: string | null
+          folder_path?: string | null
+          id?: string
+          serialize?: string | null
+          status?: number
+          thumbnail?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
