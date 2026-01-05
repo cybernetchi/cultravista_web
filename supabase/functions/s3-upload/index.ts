@@ -1,6 +1,6 @@
 // Supabase Edge Function for AWS S3 uploads
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.400.0';
+import { S3Client, PutObjectCommand } from 'https://esm.sh/@aws-sdk/client-s3@3.400.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -69,10 +69,11 @@ serve(async (req) => {
         status: 200,
       }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error in s3-upload function:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Upload failed';
     return new Response(
-      JSON.stringify({ success: false, error: error.message || 'Upload failed' }),
+      JSON.stringify({ success: false, error: errorMessage }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
