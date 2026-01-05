@@ -1,4 +1,5 @@
 // React Query hooks for KIRI and Capture operations
+import React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KiriService } from '@/services/kiriService';
 import { CaptureService } from '@/services/captureService';
@@ -170,7 +171,7 @@ export const useKiriStatus = (serialize: string, enabled: boolean = true) => {
       // Stop polling if completed or failed
       const status = query.state.data?.status;
       // KIRI status: 0=processing, 1=complete, 2=failed
-      return status === 1 || status === 2 ? false : 3000;
+      return status === 1 || status === 2 ? false : 5000;
     },
   });
 };
@@ -228,6 +229,17 @@ export const useProcessingFlow = (
 
   // Poll KIRI status
   const statusQuery = useKiriStatus(serialize || '', enabled && !!serialize);
+  
+  // Auto-trigger conversion when status becomes complete (1)
+  React.useEffect(() => {
+    const status = statusQuery.data?.status;
+    
+    if (status === 1 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending) {
+      // Status is complete, auto-trigger conversion
+      console.log('KIRI processing complete, triggering Lambda conversion:', serialize);
+      triggerConversion();
+    }
+  }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending]);
 
   // When status becomes complete (1), trigger the conversion flow
   const triggerConversion = async () => {
