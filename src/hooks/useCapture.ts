@@ -205,9 +205,15 @@ export const usePlyToSplatConversion = () => {
         throw new Error(result.error || 'PLY conversion failed');
       }
 
-      // Lambda returns splat_url in the response
-      // Check for various possible key names from Lambda
-      const splatUrl = result.data?.splat_url || result.data?.output_url || result.data?.url;
+      // Lambda response: { statusCode, body: { message, folder_path, files: { splat, ply, cameras } } }
+      // Body might be a string that needs parsing
+      let lambdaBody = result.data?.body as Record<string, unknown> | string | undefined;
+      if (typeof lambdaBody === 'string') {
+        lambdaBody = JSON.parse(lambdaBody) as Record<string, unknown>;
+      }
+      
+      const files = lambdaBody?.files as Record<string, string> | undefined;
+      const splatUrl = files?.splat;
       console.log('Extracted splat URL:', splatUrl);
 
       // Update capture with the splat URL if conversion succeeded
