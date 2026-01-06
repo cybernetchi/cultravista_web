@@ -10,18 +10,14 @@ interface IframeViewerProps {
 export function IframeViewer({ src, className, title }: IframeViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   
-  // Build iframe URL - try direct S3 access first
+  // Build iframe URL with proxy for CORS handling
   const iframeUrl = (() => {
-    // For testing: bypass proxy and try direct S3 access
+    if (src.startsWith("http")) {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zlzzjcvgkbwuaaizzrjv.supabase.co";
+      const proxyUrl = `${supabaseUrl}/functions/v1/proxy?url=${encodeURIComponent(src)}`;
+      return `/splat/index.html?url=${encodeURIComponent(proxyUrl)}`;
+    }
     return `/splat/index.html?url=${encodeURIComponent(src)}`;
-    
-    // Original proxy version (commented out):
-    // if (src.startsWith("http")) {
-    //   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zlzzjcvgkbwuaaizzrjv.supabase.co";
-    //   const proxyUrl = `${supabaseUrl}/functions/v1/proxy?url=${encodeURIComponent(src)}`;
-    //   return `/splat/index.html?url=${encodeURIComponent(proxyUrl)}`;
-    // }
-    // return `/splat/index.html?url=${encodeURIComponent(src)}`;
   })();
 
   const handleIframeLoad = () => {
