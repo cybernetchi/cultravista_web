@@ -9,6 +9,12 @@ import { cn } from "@/lib/utils";
 
 // Convert database capture to Scan type
 function captureToScan(capture: Capture): Scan {
+  const splatUrl = capture.folder_path ? `${capture.folder_path}/output.splat` : undefined;
+  
+  // Debug logging
+  console.log('Converting capture to scan:', capture);
+  console.log('Generated splatUrl:', splatUrl);
+  
   return {
     id: capture.id,
     title: capture.title,
@@ -16,7 +22,7 @@ function captureToScan(capture: Capture): Scan {
     authorHandle: "@user",
     thumbnail: capture.thumbnail || "/placeholder.svg",
     createdAt: new Date(capture.created_at),
-    splatUrl: capture.folder_path ? `${capture.folder_path}/output.splat` : undefined,
+    splatUrl,
   };
 }
 

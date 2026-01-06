@@ -15,6 +15,11 @@ interface ScanDetailViewProps {
 export function ScanDetailView({ scan, onBack, onEdit, onAnnotate }: ScanDetailViewProps) {
   const [viewMode, setViewMode] = useState<"image" | "3d">(scan.splatUrl ? "3d" : "image");
   
+  // Debug logging
+  console.log('ScanDetailView scan data:', scan);
+  console.log('splatUrl:', scan.splatUrl);
+  console.log('viewMode:', viewMode);
+  
   const formattedDate = scan.createdAt.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
