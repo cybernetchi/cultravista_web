@@ -2,7 +2,6 @@ import { Scan } from "@/types/scan";
 import { cn } from "@/lib/utils";
 import { Calendar, MapPin, MoreVertical, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SplatThumbnail } from "./SplatThumbnail";
 
 interface WebScanCardProps {
   scan: Scan;
@@ -19,15 +18,6 @@ export function WebScanCard({ scan, onClick, viewMode, index }: WebScanCardProps
   });
 
   const renderThumbnail = (className: string) => {
-    if (scan.splatUrl) {
-      return (
-        <SplatThumbnail
-          splatUrl={scan.splatUrl}
-          fallbackImage={scan.thumbnail}
-          className={className}
-        />
-      );
-    }
     return (
       <img
         src={scan.thumbnail}
