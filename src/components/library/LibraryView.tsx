@@ -16,7 +16,7 @@ function captureToScan(capture: Capture): Scan {
     authorHandle: "@user",
     thumbnail: capture.thumbnail || "/placeholder.svg",
     createdAt: new Date(capture.created_at),
-    splatUrl: capture.file || undefined,
+    splatUrl: capture.folder_path ? `${capture.folder_path}/output.splat` : undefined,
   };
 }
 
