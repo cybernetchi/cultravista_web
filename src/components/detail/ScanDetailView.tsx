@@ -1,7 +1,9 @@
-import { ChevronLeft, Share2, Pencil, MessageSquare, MoreVertical, Calendar, MapPin } from "lucide-react";
+import { ChevronLeft, Share2, Pencil, MessageSquare, MoreVertical, Calendar, MapPin, Box, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Scan } from "@/types/scan";
+import { IframeViewer } from "@/components/web/IframeViewer";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface ScanDetailViewProps {
   scan: Scan;
@@ -11,6 +13,8 @@ interface ScanDetailViewProps {
 }
 
 export function ScanDetailView({ scan, onBack, onEdit, onAnnotate }: ScanDetailViewProps) {
+  const [viewMode, setViewMode] = useState<"image" | "3d">(scan.splatUrl ? "3d" : "image");
+  
   const formattedDate = scan.createdAt.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -28,20 +32,54 @@ export function ScanDetailView({ scan, onBack, onEdit, onAnnotate }: ScanDetailV
     <div className="flex-1 flex flex-col animate-fade-in">
       {/* Image viewer */}
       <div className="relative flex-1 min-h-[50vh]">
-        <img
-          src={scan.thumbnail}
-          alt={scan.title}
-          className="w-full h-full object-cover"
-        />
-        
-        {/* Top gradient */}
-        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background/80 to-transparent" />
-        
-        {/* Bottom gradient */}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
+        {/* View mode toggle */}
+        {scan.splatUrl && (
+          <div className="absolute top-16 left-4 z-30 flex items-center bg-background/80 backdrop-blur-sm rounded-lg p-1">
+            <Button
+              variant={viewMode === "3d" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-3 gap-1.5"
+              onClick={() => setViewMode("3d")}
+            >
+              <Box className="w-3.5 h-3.5" />
+              3D
+            </Button>
+            <Button
+              variant={viewMode === "image" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-3 gap-1.5"
+              onClick={() => setViewMode("image")}
+            >
+              <Image className="w-3.5 h-3.5" />
+              Image
+            </Button>
+          </div>
+        )}
+
+        {viewMode === "3d" && scan.splatUrl ? (
+          <IframeViewer 
+            src={scan.splatUrl} 
+            title={scan.title}
+            className="w-full h-full"
+          />
+        ) : (
+          <>
+            <img
+              src={scan.thumbnail}
+              alt={scan.title}
+              className="w-full h-full object-cover"
+            />
+            
+            {/* Top gradient */}
+            <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background/80 to-transparent" />
+            
+            {/* Bottom gradient */}
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
+          </>
+        )}
         
         {/* Top controls */}
-        <div className="absolute top-2 left-0 right-0 flex items-center justify-between px-4">
+        <div className="absolute top-2 left-0 right-0 flex items-center justify-between px-4 z-30">
           <Button variant="icon" size="icon" onClick={onBack}>
             <ChevronLeft className="w-6 h-6" />
           </Button>
