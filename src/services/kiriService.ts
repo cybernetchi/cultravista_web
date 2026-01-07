@@ -139,23 +139,26 @@ export class KiriService {
   }
 
   // Convert PLY to Splat via AWS Lambda (through Supabase Edge Function)
-  static async convertPlyToSplat(s3Url: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+  // Uses fire-and-forget pattern - returns immediately, database is updated when complete
+  static async convertPlyToSplat(s3Url: string, captureId: string): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
     try {
       const { data, error } = await supabase.functions.invoke('ply-to-splat', {
-        body: { s3_url: s3Url }
+        body: { s3_url: s3Url, capture_id: captureId }
       });
 
       if (error) {
-        console.error('Error converting PLY to Splat:', error);
+        console.error('Error triggering PLY to Splat conversion:', error);
         return { success: false, error: error.message };
       }
 
+      // Returns immediately with status: 'processing'
+      // The edge function updates the database when Lambda completes
       return { success: true, data };
     } catch (error) {
-      console.error('Error converting PLY to Splat:', error);
+      console.error('Error triggering PLY to Splat conversion:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to convert PLY',
+        error: error instanceof Error ? error.message : 'Failed to trigger conversion',
       };
     }
   }
