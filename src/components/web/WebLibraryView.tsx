@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils";
 
 // Convert database capture to Scan type
 function captureToScan(capture: Capture): Scan {
+  const folderPath = capture.folder_path || undefined;
+  const splatUrl = folderPath ? `${folderPath}/output.splat` : undefined;
+  
   return {
     id: capture.id,
     title: capture.title,
@@ -16,7 +19,9 @@ function captureToScan(capture: Capture): Scan {
     authorHandle: "@user",
     thumbnail: capture.thumbnail || "/placeholder.svg",
     createdAt: new Date(capture.created_at),
-    splatUrl: capture.folder_path ? `${capture.folder_path}/output.splat` : undefined,
+    splatUrl,
+    status: capture.status, // 0=processing, 1=complete, 2=failed
+    folderPath,
   };
 }
 
@@ -36,6 +41,12 @@ export function WebLibraryView({ onSelectScan, searchQuery }: WebLibraryViewProp
         throw new Error(result.error || 'Failed to fetch captures');
       }
       return result.data || [];
+    },
+    // Poll every 5 seconds if there are any processing items
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasProcessing = data?.some((c: Capture) => c.status === 0 || (c.status === 1 && !c.folder_path));
+      return hasProcessing ? 5000 : false;
     },
   });
 

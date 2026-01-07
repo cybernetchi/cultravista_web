@@ -79,7 +79,7 @@ export function ProcessingStatus({ serialize, captureId, onComplete }: Processin
       )}
       
       <div className="mt-3 text-xs text-muted-foreground space-y-1">
-        <div>Status: {status} (0=processing, 1=complete, 2=failed)</div>
+        <div>Status: {status} (0=processing, 1=failed, 2=successful)</div>
         <div>Serialize ID: {serialize}</div>
         <div>Capture ID: {captureId}</div>
       </div>

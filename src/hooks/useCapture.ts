@@ -170,7 +170,8 @@ export const useKiriStatus = (serialize: string, enabled: boolean = true) => {
     refetchInterval: (query) => {
       // Stop polling if completed or failed
       const status = query.state.data?.status;
-      // KIRI status: 0=processing, 1=complete, 2=failed (corrected)
+      console.log('KIRI status poll:', status);
+      // KIRI status: 0=processing, 1=failed, 2=successful
       return status === 1 || status === 2 ? false : 5000;
     },
   });
@@ -212,14 +213,36 @@ export const usePlyToSplatConversion = () => {
         lambdaBody = JSON.parse(lambdaBody) as Record<string, unknown>;
       }
       
+      console.log('Parsed Lambda body:', lambdaBody);
+      
+      const folderPath = lambdaBody?.folder_path as string | undefined;
       const files = lambdaBody?.files as Record<string, string> | undefined;
       const splatUrl = files?.splat;
-      console.log('Extracted splat URL:', splatUrl);
+      
+      console.log('Extracted from Lambda response:', { folderPath, splatUrl, files });
 
-      // Update capture with the splat URL if conversion succeeded
-      if (splatUrl) {
-        console.log('Updating capture with splat URL:', { captureId, splatUrl });
+      // Update capture with folder_path (used to construct splat URL in library view)
+      if (folderPath) {
+        console.log('Updating capture with folder_path:', { captureId, folderPath });
         const updateResult = await CaptureService.updateCapture(captureId, {
+          folder_path: folderPath,
+          file: splatUrl || null, // Also store the direct splat URL
+          status: 1, // Complete
+        });
+        console.log('Capture update result:', updateResult);
+        
+        if (!updateResult.success) {
+          console.error('Failed to update capture:', updateResult.error);
+          throw new Error(updateResult.error || 'Failed to update capture');
+        }
+      } else if (splatUrl) {
+        // Fallback: extract folder_path from splatUrl if folder_path not provided
+        // splatUrl format: https://bucket.s3.region.amazonaws.com/folder/output.splat
+        const extractedFolderPath = splatUrl.replace('/output.splat', '');
+        console.log('Extracted folder_path from splatUrl:', extractedFolderPath);
+        
+        const updateResult = await CaptureService.updateCapture(captureId, {
+          folder_path: extractedFolderPath,
           file: splatUrl,
           status: 1, // Complete
         });
@@ -230,7 +253,7 @@ export const usePlyToSplatConversion = () => {
           throw new Error(updateResult.error || 'Failed to update capture');
         }
       } else {
-        console.warn('No splat URL in Lambda response, marking as failed');
+        console.warn('No folder_path or splat URL in Lambda response, marking as failed');
         await CaptureService.updateCapture(captureId, { status: 2 }); // Failed
       }
 
@@ -284,13 +307,16 @@ export const useProcessingFlow = (
     }
   }, [serialize, captureId, getModelZip, convertToSplat, queryClient]);
   
-  // Auto-trigger conversion when status becomes complete (1)
+  // Auto-trigger conversion when KIRI status becomes successful (status=2)
+  // KIRI status codes: -1=uploading, 0=processing, 1=failed, 2=successful, 3=queuing, 4=expired
   React.useEffect(() => {
     const status = statusQuery.data?.status;
     
-    if (status === 1 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending) {
-      // Status is complete, auto-trigger conversion
-      console.log('KIRI processing complete (status=1), triggering Lambda conversion:', serialize);
+    console.log('Processing flow status check:', { status, serialize, captureId, isPending: getModelZip.isPending || convertToSplat.isPending });
+    
+    // Only trigger conversion on status 2 (successful)
+    if (status === 2 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending) {
+      console.log('KIRI processing successful (status=2), triggering Lambda conversion:', serialize);
       triggerConversion();
     }
   }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending, triggerConversion]);
@@ -299,8 +325,8 @@ export const useProcessingFlow = (
     status: statusQuery.data?.status,
     progress: statusQuery.data?.progress,
     isPolling: statusQuery.isFetching,
-    isComplete: statusQuery.data?.status === 1,
-    isFailed: statusQuery.data?.status === 2,
+    isComplete: statusQuery.data?.status === 2, // KIRI status 2 = successful
+    isFailed: statusQuery.data?.status === 1 || statusQuery.data?.status === 4, // KIRI status 1=failed, 4=expired
     isConverting: getModelZip.isPending || convertToSplat.isPending,
     conversionError: getModelZip.error || convertToSplat.error,
     triggerConversion,

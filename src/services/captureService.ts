@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface Capture {
   id: string;
   title: string;
-  status: number; // 0 = processing, 1 = complete, 2 = failed
+  status: number; // DB status: 0=processing, 1=complete, 2=failed (Note: differs from KIRI API status)
   thumbnail: string | null;
   file: string | null;
   serialize: string | null;
