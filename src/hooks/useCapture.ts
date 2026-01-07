@@ -206,17 +206,11 @@ export const usePlyToSplatConversion = () => {
         throw new Error(result.error || 'PLY conversion failed');
       }
 
-      // Lambda response: { statusCode, body: { message, folder_path, files: { splat, ply, cameras } } }
-      // Body might be a string that needs parsing
-      let lambdaBody = result.data?.body as Record<string, unknown> | string | undefined;
-      if (typeof lambdaBody === 'string') {
-        lambdaBody = JSON.parse(lambdaBody) as Record<string, unknown>;
-      }
-      
-      console.log('Parsed Lambda body:', lambdaBody);
-      
-      const folderPath = lambdaBody?.folder_path as string | undefined;
-      const files = lambdaBody?.files as Record<string, string> | undefined;
+      // Lambda Function URL returns the body directly (not wrapped in statusCode/body)
+      // So result.data = { message, folder_path, files: { splat, ply, cameras } }
+      const data = result.data;
+      const folderPath = data?.folder_path as string | undefined;
+      const files = data?.files as Record<string, string> | undefined;
       const splatUrl = files?.splat;
       
       console.log('Extracted from Lambda response:', { folderPath, splatUrl, files });
@@ -286,13 +280,18 @@ export const useProcessingFlow = (
       // Step 1: Get the model zip URL from KIRI
       const modelData = await getModelZip.mutateAsync(serialize);
       
-      if (!modelData?.splatUrl) {
+      console.log('Model zip response:', modelData);
+      
+      // KIRI API returns modelUrl, not splatUrl
+      const modelUrl = modelData?.modelUrl || modelData?.splatUrl;
+      
+      if (!modelUrl) {
         throw new Error('No model URL returned from KIRI');
       }
 
       // Step 2: Trigger Lambda conversion
       await convertToSplat.mutateAsync({
-        s3Url: modelData.splatUrl,
+        s3Url: modelUrl,
         captureId,
       });
 

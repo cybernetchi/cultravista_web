@@ -16,6 +16,7 @@ interface KiriStatusResponse {
     status?: number;
     progress?: number;
     splatUrl?: string;
+    modelUrl?: string; // KIRI API returns modelUrl for model download
     [key: string]: string | number | boolean | undefined;
   };
   error?: string;
