@@ -190,70 +190,30 @@ export const useGetModelZip = () => {
   });
 };
 
-// PLY to Splat conversion hook (triggers AWS Lambda)
+// PLY to Splat conversion hook (triggers AWS Lambda via fire-and-forget pattern)
+// The edge function returns immediately and updates the database when Lambda completes
 export const usePlyToSplatConversion = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ s3Url, captureId }: { s3Url: string; captureId: string }) => {
-      console.log('Starting PLY to Splat conversion:', { s3Url, captureId });
+      console.log('Triggering PLY to Splat conversion:', { s3Url, captureId });
       
-      // Call Lambda via Edge Function
-      const result = await KiriService.convertPlyToSplat(s3Url);
-      console.log('Lambda conversion result:', result);
+      // Trigger background conversion via Edge Function
+      // This returns immediately - the edge function updates the database when Lambda completes
+      const result = await KiriService.convertPlyToSplat(s3Url, captureId);
+      console.log('Conversion trigger result:', result);
       
       if (!result.success) {
-        throw new Error(result.error || 'PLY conversion failed');
+        throw new Error(result.error || 'Failed to trigger PLY conversion');
       }
 
-      // Lambda Function URL returns the body directly (not wrapped in statusCode/body)
-      // So result.data = { message, folder_path, files: { splat, ply, cameras } }
-      const data = result.data;
-      const folderPath = data?.folder_path as string | undefined;
-      const files = data?.files as Record<string, string> | undefined;
-      const splatUrl = files?.splat;
-      
-      console.log('Extracted from Lambda response:', { folderPath, splatUrl, files });
-
-      // Update capture with folder_path (used to construct splat URL in library view)
-      if (folderPath) {
-        console.log('Updating capture with folder_path:', { captureId, folderPath });
-        const updateResult = await CaptureService.updateCapture(captureId, {
-          folder_path: folderPath,
-          file: splatUrl || null, // Also store the direct splat URL
-          status: 1, // Complete
-        });
-        console.log('Capture update result:', updateResult);
-        
-        if (!updateResult.success) {
-          console.error('Failed to update capture:', updateResult.error);
-          throw new Error(updateResult.error || 'Failed to update capture');
-        }
-      } else if (splatUrl) {
-        // Fallback: extract folder_path from splatUrl if folder_path not provided
-        // splatUrl format: https://bucket.s3.region.amazonaws.com/folder/output.splat
-        const extractedFolderPath = splatUrl.replace('/output.splat', '');
-        console.log('Extracted folder_path from splatUrl:', extractedFolderPath);
-        
-        const updateResult = await CaptureService.updateCapture(captureId, {
-          folder_path: extractedFolderPath,
-          file: splatUrl,
-          status: 1, // Complete
-        });
-        console.log('Capture update result:', updateResult);
-        
-        if (!updateResult.success) {
-          console.error('Failed to update capture:', updateResult.error);
-          throw new Error(updateResult.error || 'Failed to update capture');
-        }
-      } else {
-        console.warn('No folder_path or splat URL in Lambda response, marking as failed');
-        await CaptureService.updateCapture(captureId, { status: 2 }); // Failed
-      }
-
+      // The database will be updated by the edge function when Lambda completes
+      // Frontend should poll captures table to detect completion
       return result.data;
     },
     onSuccess: () => {
+      // Invalidate immediately to show "converting" state
       queryClient.invalidateQueries({ queryKey: ['captures'] });
     },
   });
@@ -268,9 +228,37 @@ export const useProcessingFlow = (
   const queryClient = useQueryClient();
   const getModelZip = useGetModelZip();
   const convertToSplat = usePlyToSplatConversion();
+  
+  // Track if we've triggered Lambda conversion (fire-and-forget)
+  const [conversionTriggered, setConversionTriggered] = React.useState(false);
 
   // Poll KIRI status
   const statusQuery = useKiriStatus(serialize || '', enabled && !!serialize);
+  
+  // Poll capture status to detect when Lambda completes (background updates the database)
+  const captureQuery = useCapture(captureId || '');
+  
+  // Refetch capture periodically while waiting for Lambda to complete
+  React.useEffect(() => {
+    if (!conversionTriggered || !captureId) return;
+    
+    // Capture status: 0=processing, 1=complete, 2=failed
+    const captureStatus = captureQuery.data?.status;
+    if (captureStatus === 1 || captureStatus === 2) {
+      // Lambda completed, stop polling
+      console.log('Lambda conversion completed, capture status:', captureStatus);
+      return;
+    }
+    
+    // Poll every 5 seconds while waiting for Lambda
+    const interval = setInterval(() => {
+      console.log('Polling capture for Lambda completion...');
+      queryClient.invalidateQueries({ queryKey: ['capture', captureId] });
+      queryClient.invalidateQueries({ queryKey: ['captures'] });
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [conversionTriggered, captureId, captureQuery.data?.status, queryClient]);
 
   // Define triggerConversion with useCallback BEFORE the useEffect
   const triggerConversion = React.useCallback(async () => {
@@ -289,11 +277,16 @@ export const useProcessingFlow = (
         throw new Error('No model URL returned from KIRI');
       }
 
-      // Step 2: Trigger Lambda conversion
+      // Step 2: Trigger Lambda conversion (fire-and-forget)
+      // The edge function returns immediately and updates the database when Lambda completes
       await convertToSplat.mutateAsync({
         s3Url: modelUrl,
         captureId,
       });
+      
+      // Mark conversion as triggered - we'll poll the capture table for completion
+      setConversionTriggered(true);
+      console.log('Lambda conversion triggered, will poll for completion');
 
       queryClient.invalidateQueries({ queryKey: ['captures'] });
     } catch (error) {
@@ -311,22 +304,26 @@ export const useProcessingFlow = (
   React.useEffect(() => {
     const status = statusQuery.data?.status;
     
-    console.log('Processing flow status check:', { status, serialize, captureId, isPending: getModelZip.isPending || convertToSplat.isPending });
+    console.log('Processing flow status check:', { status, serialize, captureId, isPending: getModelZip.isPending || convertToSplat.isPending, conversionTriggered });
     
-    // Only trigger conversion on status 2 (successful)
-    if (status === 2 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending) {
+    // Only trigger conversion on status 2 (successful) and if not already triggered
+    if (status === 2 && serialize && captureId && !getModelZip.isPending && !convertToSplat.isPending && !conversionTriggered) {
       console.log('KIRI processing successful (status=2), triggering Lambda conversion:', serialize);
       triggerConversion();
     }
-  }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending, triggerConversion]);
+  }, [statusQuery.data?.status, serialize, captureId, getModelZip.isPending, convertToSplat.isPending, conversionTriggered, triggerConversion]);
+
+  // Determine if Lambda is still running (conversion triggered but capture not yet updated)
+  const captureStatus = captureQuery.data?.status;
+  const isLambdaRunning = conversionTriggered && captureStatus === 0;
 
   return {
     status: statusQuery.data?.status,
     progress: statusQuery.data?.progress,
     isPolling: statusQuery.isFetching,
-    isComplete: statusQuery.data?.status === 2, // KIRI status 2 = successful
-    isFailed: statusQuery.data?.status === 1 || statusQuery.data?.status === 4, // KIRI status 1=failed, 4=expired
-    isConverting: getModelZip.isPending || convertToSplat.isPending,
+    isComplete: captureStatus === 1, // Capture status 1 = complete (Lambda finished)
+    isFailed: statusQuery.data?.status === 1 || statusQuery.data?.status === 4 || captureStatus === 2,
+    isConverting: getModelZip.isPending || convertToSplat.isPending || isLambdaRunning,
     conversionError: getModelZip.error || convertToSplat.error,
     triggerConversion,
   };
