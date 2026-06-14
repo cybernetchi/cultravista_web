@@ -1,16 +1,23 @@
-project_id = "zlzzjcvgkbwuaaizzrjv"
+project_id = "gwtfkqkcvdqpccyglaff"
 
+# User-initiated functions now require a valid session JWT. The frontend calls
+# these via supabase.functions.invoke, which forwards the user's access token.
 [functions.kiri-token]
-verify_jwt = false
+verify_jwt = true
 
 [functions.kiri-status]
-verify_jwt = false
+verify_jwt = true
 
 [functions.kiri-model-zip]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ply-to-splat]
-verify_jwt = false
+verify_jwt = true
 
 [functions.s3-upload]
+verify_jwt = true
+
+# proxy stays open: it is the CORS asset proxy used by the public /iframe-viewer
+# and only relays asset bytes (no DB access).
+[functions.proxy]
 verify_jwt = false
