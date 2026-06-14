@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 // (MoreHorizontal removed with the fake stats/actions cleanup)
 import { Button } from "@/components/ui/button";
-import { IframeViewer } from "./IframeViewer";
+import { GaussianSplatViewer } from "./GaussianSplatViewer";
 import { useState } from "react";
 
 interface WebDetailPanelProps {
@@ -103,9 +103,9 @@ export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailP
           {/* Preview Content */}
           <div className="flex-1 relative min-h-0">
             {viewMode === "3d" && scan.splatUrl ? (
-              <IframeViewer 
-                src={scan.splatUrl} 
-                title={scan.title}
+              <GaussianSplatViewer
+                src={scan.splatUrl}
+                title={displayTitle}
                 className="absolute inset-0 rounded-none border-0"
               />
             ) : (

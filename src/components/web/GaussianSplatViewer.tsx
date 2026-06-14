@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { Splat, OrbitControls, Environment, PerspectiveCamera, Grid } from "@react-three/drei";
+import { Splat, OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import { Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -24,39 +24,25 @@ interface GaussianSplatViewerProps {
 function SplatScene({ src }: { src: string }) {
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 1.5, 4]} fov={50} />
-      <OrbitControls 
-        enablePan 
-        enableZoom 
+      <PerspectiveCamera makeDefault position={[0, 0, 4]} fov={50} />
+      {/* Damped orbit: drag to rotate, scroll to zoom, right-drag to pan.
+          makeDefault so the controls own the camera; damping for a smoother feel. */}
+      <OrbitControls
+        makeDefault
+        enablePan
+        enableZoom
         enableRotate
-        minDistance={1}
-        maxDistance={20}
-        target={[0, 0.5, 0]}
+        enableDamping
+        dampingFactor={0.1}
+        minDistance={0.5}
+        maxDistance={50}
+        target={[0, 0, 0]}
       />
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.6} />
       <directionalLight position={[10, 10, 5]} intensity={1} />
       <Suspense fallback={null}>
-        <Splat 
-          src={src}
-          alphaTest={0.1}
-          position={[0, 0, 0]}
-        />
+        <Splat src={src} alphaTest={0.1} position={[0, 0, 0]} />
       </Suspense>
-      <Grid 
-        position={[0, -0.5, 0]}
-        args={[20, 20]}
-        cellSize={0.5}
-        cellThickness={0.5}
-        cellColor="#39FF14"
-        sectionSize={2}
-        sectionThickness={1}
-        sectionColor="#39FF14"
-        fadeDistance={25}
-        fadeStrength={1}
-        followCamera={false}
-        infiniteGrid
-      />
-      <Environment preset="city" />
     </>
   );
 }
