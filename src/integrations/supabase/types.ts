@@ -16,47 +16,154 @@ export type Database = {
     Tables: {
       captures: {
         Row: {
+          attribution: string | null
+          capture_date: string | null
           created_at: string
+          description: string | null
+          description_zh_hant: string | null
           file: string | null
           folder_path: string | null
           id: string
+          lat: number | null
+          lng: number | null
+          location_text: string | null
           org_id: string | null
           owner_id: string | null
+          rights_license: string | null
           serialize: string | null
+          source: string
           status: number
+          tags: string[]
           thumbnail: string | null
           title: string
+          title_zh_hant: string | null
           updated_at: string
         }
         Insert: {
+          attribution?: string | null
+          capture_date?: string | null
           created_at?: string
+          description?: string | null
+          description_zh_hant?: string | null
           file?: string | null
           folder_path?: string | null
           id?: string
+          lat?: number | null
+          lng?: number | null
+          location_text?: string | null
           org_id?: string | null
           owner_id?: string | null
+          rights_license?: string | null
           serialize?: string | null
+          source?: string
           status?: number
+          tags?: string[]
           thumbnail?: string | null
           title: string
+          title_zh_hant?: string | null
           updated_at?: string
         }
         Update: {
+          attribution?: string | null
+          capture_date?: string | null
           created_at?: string
+          description?: string | null
+          description_zh_hant?: string | null
           file?: string | null
           folder_path?: string | null
           id?: string
+          lat?: number | null
+          lng?: number | null
+          location_text?: string | null
           org_id?: string | null
           owner_id?: string | null
+          rights_license?: string | null
           serialize?: string | null
+          source?: string
           status?: number
+          tags?: string[]
           thumbnail?: string | null
           title?: string
+          title_zh_hant?: string | null
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "captures_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      collection_captures: {
+        Row: {
+          capture_id: string
+          collection_id: string
+          created_at: string
+        }
+        Insert: {
+          capture_id: string
+          collection_id: string
+          created_at?: string
+        }
+        Update: {
+          capture_id?: string
+          collection_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_captures_capture_id_fkey"
+            columns: ["capture_id"]
+            isOneToOne: false
+            referencedRelation: "captures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_captures_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "collections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      collections: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          name_zh_hant: string | null
+          org_id: string
+          owner_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          name_zh_hant?: string | null
+          org_id: string
+          owner_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          name_zh_hant?: string | null
+          org_id?: string
+          owner_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collections_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"

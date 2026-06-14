@@ -22,6 +22,19 @@ function captureToScan(capture: Capture): Scan {
     splatUrl,
     status: capture.status, // 0=processing, 1=complete, 2=failed
     folderPath,
+    // PR2 archival metadata
+    titleZhHant: capture.title_zh_hant,
+    description: capture.description,
+    descriptionZhHant: capture.description_zh_hant,
+    captureDate: capture.capture_date,
+    locationText: capture.location_text,
+    lat: capture.lat,
+    lng: capture.lng,
+    rightsLicense: capture.rights_license,
+    attribution: capture.attribution,
+    tags: capture.tags,
+    source: capture.source,
+    location: capture.location_text || undefined,
   };
 }
 

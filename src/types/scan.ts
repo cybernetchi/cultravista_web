@@ -1,6 +1,6 @@
 export interface Scan {
   id: string;
-  title: string;
+  title: string; // canonical English title
   author: string;
   authorHandle: string;
   thumbnail: string;
@@ -9,6 +9,18 @@ export interface Scan {
   splatUrl?: string; // URL to the .splat file for Gaussian Splatting
   status?: number; // 0=processing, 1=complete, 2=failed (DB status)
   folderPath?: string; // S3 folder path where splat file is stored
+  // PR2 archival metadata
+  titleZhHant?: string | null;
+  description?: string | null;
+  descriptionZhHant?: string | null;
+  captureDate?: string | null; // ISO date (YYYY-MM-DD)
+  locationText?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  rightsLicense?: string | null;
+  attribution?: string | null;
+  tags?: string[];
+  source?: string;
 }
 
 export type ViewMode = 'library' | 'detail' | 'edit' | 'annotate' | 'capture';

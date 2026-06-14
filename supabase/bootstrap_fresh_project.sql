@@ -64,7 +64,7 @@ CREATE INDEX idx_memberships_org_id ON public.memberships(org_id);
 -- ----------------------------------------------------------------------------
 CREATE TABLE public.captures (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT NOT NULL,
+  title TEXT NOT NULL, -- canonical English title
   status INTEGER NOT NULL DEFAULT 0, -- 0 = processing, 1 = complete, 2 = failed
   thumbnail TEXT,
   file TEXT,
@@ -72,9 +72,42 @@ CREATE TABLE public.captures (
   folder_path TEXT,
   owner_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   org_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
+  -- PR2 archival metadata
+  title_zh_hant TEXT,
+  description TEXT,
+  description_zh_hant TEXT,
+  capture_date DATE,
+  location_text TEXT,
+  lat NUMERIC,
+  lng NUMERIC,
+  rights_license TEXT,
+  attribution TEXT,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  source TEXT NOT NULL DEFAULT 'kiri', -- 'kiri' | 'upload'
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
+
+-- PR2: collections (museum/exhibition grouping) + capture link table.
+CREATE TABLE public.collections (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  owner_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  name_zh_hant TEXT,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_collections_org_id ON public.collections(org_id);
+
+CREATE TABLE public.collection_captures (
+  collection_id UUID NOT NULL REFERENCES public.collections(id) ON DELETE CASCADE,
+  capture_id UUID NOT NULL REFERENCES public.captures(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  PRIMARY KEY (collection_id, capture_id)
+);
+CREATE INDEX idx_collection_captures_capture_id ON public.collection_captures(capture_id);
 
 CREATE INDEX idx_captures_org_id ON public.captures(org_id);
 CREATE INDEX idx_captures_owner_id ON public.captures(owner_id);
@@ -91,6 +124,9 @@ CREATE TRIGGER update_memberships_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_captures_updated_at
   BEFORE UPDATE ON public.captures
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER update_collections_updated_at
+  BEFORE UPDATE ON public.collections
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ----------------------------------------------------------------------------
@@ -158,6 +194,8 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.captures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.collections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.collection_captures ENABLE ROW LEVEL SECURITY;
 
 -- captures: org-scoped read/write, admin-only delete.
 CREATE POLICY "Org members can view captures"
@@ -193,6 +231,34 @@ CREATE POLICY "Admins can update their organizations"
 CREATE POLICY "Users can view own memberships"
   ON public.memberships FOR SELECT TO authenticated
   USING (user_id = auth.uid());
+
+-- collections: org-scoped read/write, admin-only delete.
+CREATE POLICY "Org members can view collections"
+  ON public.collections FOR SELECT TO authenticated
+  USING (public.is_org_member(org_id));
+CREATE POLICY "Org members can create collections"
+  ON public.collections FOR INSERT TO authenticated
+  WITH CHECK (owner_id = auth.uid() AND public.is_org_member(org_id));
+CREATE POLICY "Org members can update collections"
+  ON public.collections FOR UPDATE TO authenticated
+  USING (public.is_org_member(org_id)) WITH CHECK (public.is_org_member(org_id));
+CREATE POLICY "Org admins can delete collections"
+  ON public.collections FOR DELETE TO authenticated
+  USING (public.is_org_admin(org_id));
+
+-- collection_captures: gated by membership of the parent collection's org.
+CREATE POLICY "Org members can view collection links"
+  ON public.collection_captures FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.collections c
+    WHERE c.id = collection_id AND public.is_org_member(c.org_id)));
+CREATE POLICY "Org members can add collection links"
+  ON public.collection_captures FOR INSERT TO authenticated
+  WITH CHECK (EXISTS (SELECT 1 FROM public.collections c
+    WHERE c.id = collection_id AND public.is_org_member(c.org_id)));
+CREATE POLICY "Org members can remove collection links"
+  ON public.collection_captures FOR DELETE TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.collections c
+    WHERE c.id = collection_id AND public.is_org_member(c.org_id)));
 
 -- ----------------------------------------------------------------------------
 -- Storage: public read (asset/thumbnail delivery + iframe viewer),

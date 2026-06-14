@@ -1,9 +1,10 @@
 // Capture service using Supabase Database
 import { supabase } from '@/integrations/supabase/client';
+import { resolveOwnerAndOrg } from './orgContext';
 
 export interface Capture {
   id: string;
-  title: string;
+  title: string; // canonical English title
   status: number; // DB status: 0=processing, 1=complete, 2=failed (Note: differs from KIRI API status)
   thumbnail: string | null;
   file: string | null;
@@ -11,20 +12,48 @@ export interface Capture {
   folder_path: string | null;
   owner_id: string | null; // auth.users id of the creator (set by RLS-scoped insert)
   org_id: string | null; // organization the capture is scoped to
+  // PR2 archival metadata
+  title_zh_hant: string | null;
+  description: string | null;
+  description_zh_hant: string | null;
+  capture_date: string | null; // ISO date (YYYY-MM-DD)
+  location_text: string | null;
+  lat: number | null;
+  lng: number | null;
+  rights_license: string | null;
+  attribution: string | null;
+  tags: string[];
+  source: string; // 'kiri' | 'upload'
   created_at: string;
   updated_at: string;
 }
 
-interface CaptureInsert {
+// Fields a caller may set when creating/updating a capture. owner_id/org_id are
+// stamped by the service, not the caller.
+interface CaptureMetadata {
+  title_zh_hant?: string | null;
+  description?: string | null;
+  description_zh_hant?: string | null;
+  capture_date?: string | null;
+  location_text?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  rights_license?: string | null;
+  attribution?: string | null;
+  tags?: string[];
+}
+
+interface CaptureInsert extends CaptureMetadata {
   title: string;
   status?: number;
   thumbnail?: string;
   file?: string;
   serialize?: string;
   folder_path?: string;
+  source?: string;
 }
 
-interface CaptureUpdate {
+interface CaptureUpdate extends CaptureMetadata {
   title?: string;
   status?: number;
   thumbnail?: string;
@@ -40,44 +69,10 @@ interface ApiResponse<T> {
 }
 
 export class CaptureService {
-  // Resolve the current user's id and personal organization id. Captures are
-  // owner/org-scoped by RLS, so every insert must carry both.
-  private static async resolveOwnerAndOrg(): Promise<
-    { ownerId: string; orgId: string } | { error: string }
-  > {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return { error: 'You must be signed in to create a capture.' };
-    }
-
-    const { data: memberships, error: orgError } = await supabase
-      .from('memberships')
-      .select('org_id, organizations!inner(is_personal)')
-      .eq('user_id', user.id);
-
-    if (orgError) {
-      return { error: 'Failed to resolve your organization.' };
-    }
-
-    const personalOrgId = memberships?.find(
-      (m) => m.organizations?.is_personal
-    )?.org_id;
-
-    if (!personalOrgId) {
-      return { error: 'No personal organization found for this user.' };
-    }
-
-    return { ownerId: user.id, orgId: personalOrgId };
-  }
-
   // Create new capture
   static async createCapture(data: CaptureInsert): Promise<ApiResponse<Capture>> {
     try {
-      const scope = await CaptureService.resolveOwnerAndOrg();
+      const scope = await resolveOwnerAndOrg();
       if ('error' in scope) {
         return { success: false, error: scope.error };
       }
@@ -85,12 +80,9 @@ export class CaptureService {
       const { data: capture, error } = await supabase
         .from('captures')
         .insert({
-          title: data.title,
+          ...data,
           status: data.status ?? 0, // 0 = processing
-          thumbnail: data.thumbnail,
-          serialize: data.serialize,
-          file: data.file,
-          folder_path: data.folder_path,
+          source: data.source ?? 'kiri',
           owner_id: scope.ownerId,
           org_id: scope.orgId,
         })

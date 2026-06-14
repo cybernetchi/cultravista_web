@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { X, Upload, Film, Images, Check, FileVideo, Image as ImageIcon, Trash2 } from "lucide-react";
+import { X, Upload, Film, Images, Check, FileVideo, Image as ImageIcon, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useKiriUpload, useProcessingFlow } from "@/hooks/useCapture";
 import { toast } from "sonner";
 
@@ -27,6 +28,12 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [title, setTitle] = useState("");
+  // Optional archival metadata captured up front (PR2); the rest is added via Edit.
+  const [showDetails, setShowDetails] = useState(false);
+  const [description, setDescription] = useState("");
+  const [captureDate, setCaptureDate] = useState("");
+  const [location, setLocation] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [serialize, setSerialize] = useState<string | null>(null);
   const [captureId, setCaptureId] = useState<string | null>(null);
@@ -117,9 +124,20 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
     try {
       const files = uploadedFiles.map(f => f.file);
       
+      const tags = tagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
       const result = await kiriUploadMutation.mutateAsync({
         files,
         title,
+        metadata: {
+          description: description.trim() || null,
+          capture_date: captureDate || null,
+          location_text: location.trim() || null,
+          tags,
+        },
         onProgress: (prog) => {
           setProgress(prog);
           if (prog >= 80) {
@@ -148,6 +166,11 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
     setCreateState("idle");
     setProgress(0);
     setTitle("");
+    setDescription("");
+    setCaptureDate("");
+    setLocation("");
+    setTagsInput("");
+    setShowDetails(false);
     setError(null);
     setSerialize(null);
     setCaptureId(null);
@@ -202,6 +225,67 @@ export function WebCreateModal({ onClose, onComplete }: WebCreateModalProps) {
               disabled={createState !== "idle"}
               className="mb-4"
             />
+
+            {/* Optional archival details (collapsible) */}
+            <button
+              type="button"
+              onClick={() => setShowDetails((s) => !s)}
+              disabled={createState !== "idle"}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {showDetails ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+              Details (optional)
+            </button>
+
+            {showDetails && (
+              <div className="mt-3 space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="model-desc" className="text-xs text-muted-foreground">Description</Label>
+                  <Textarea
+                    id="model-desc"
+                    placeholder="Describe this artifact"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={createState !== "idle"}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="model-date" className="text-xs text-muted-foreground">Capture date</Label>
+                  <Input
+                    id="model-date"
+                    type="date"
+                    value={captureDate}
+                    onChange={(e) => setCaptureDate(e.target.value)}
+                    disabled={createState !== "idle"}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="model-location" className="text-xs text-muted-foreground">Location</Label>
+                  <Input
+                    id="model-location"
+                    placeholder="e.g. Sheung Wan, Hong Kong"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    disabled={createState !== "idle"}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="model-tags" className="text-xs text-muted-foreground">Tags</Label>
+                  <Input
+                    id="model-tags"
+                    placeholder="comma, separated, tags"
+                    value={tagsInput}
+                    onChange={(e) => setTagsInput(e.target.value)}
+                    disabled={createState !== "idle"}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-border">

@@ -69,10 +69,18 @@ export const useKiriUpload = () => {
     mutationFn: async ({
       files,
       title,
+      metadata,
       onProgress,
     }: {
       files: File[];
       title: string;
+      // Optional archival metadata supplied at capture time (PR2).
+      metadata?: {
+        description?: string | null;
+        capture_date?: string | null;
+        location_text?: string | null;
+        tags?: string[];
+      };
       onProgress?: (progress: number) => void;
     }) => {
       // Step 1: Generate and upload thumbnail
@@ -135,6 +143,7 @@ export const useKiriUpload = () => {
         title: title.trim(),
         thumbnail: thumbnailUrl,
         serialize: uploadResult.data.serialize,
+        ...metadata,
       });
 
       if (!captureResult.success || !captureResult.data) {
