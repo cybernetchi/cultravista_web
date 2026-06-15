@@ -21,6 +21,19 @@ interface GaussianSplatViewerProps {
   title?: string;
 }
 
+// Remote (http) splats must be loaded through the Supabase `proxy` edge function:
+// S3 serves the file but without an Access-Control-Allow-Origin header, so a
+// direct browser fetch is blocked by CORS. The proxy re-serves it with CORS
+// headers. Same-origin/relative URLs (e.g. local sample splats) pass through.
+function resolveSplatUrl(src: string): string {
+  if (/^https?:\/\//i.test(src)) {
+    const supabaseUrl =
+      import.meta.env.VITE_SUPABASE_URL || "https://gwtfkqkcvdqpccyglaff.supabase.co";
+    return `${supabaseUrl}/functions/v1/proxy?url=${encodeURIComponent(src)}`;
+  }
+  return src;
+}
+
 interface SplatBounds {
   center: [number, number, number];
   radius: number;
@@ -118,7 +131,9 @@ function CameraRig({ bounds }: { bounds: SplatBounds | null }) {
 }
 
 function SplatScene({ src }: { src: string }) {
-  const bounds = useSplatBounds(src);
+  // Route remote splats through the CORS-enabling proxy before loading/parsing.
+  const loadUrl = resolveSplatUrl(src);
+  const bounds = useSplatBounds(loadUrl);
 
   return (
     <>
@@ -138,7 +153,7 @@ function SplatScene({ src }: { src: string }) {
       <ambientLight intensity={0.6} />
       <directionalLight position={[10, 10, 5]} intensity={1} />
       <Suspense fallback={null}>
-        <Splat src={src} alphaTest={0.1} position={[0, 0, 0]} />
+        <Splat src={loadUrl} alphaTest={0.1} position={[0, 0, 0]} />
       </Suspense>
     </>
   );
