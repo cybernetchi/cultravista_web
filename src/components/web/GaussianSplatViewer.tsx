@@ -1,6 +1,6 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Splat, OrbitControls, PerspectiveCamera } from "@react-three/drei";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   RotateCcw, 
@@ -21,12 +21,109 @@ interface GaussianSplatViewerProps {
   title?: string;
 }
 
+interface SplatBounds {
+  center: [number, number, number];
+  radius: number;
+}
+
+// drei's <Splat> keeps point positions in instanced attributes, so a normal
+// bounding-box can't measure it. Instead we parse the .splat file ourselves
+// (antimatter15 format: 32 bytes/point, xyz float32 at offset 0) to find the
+// true centroid + spread, which we use to aim the camera and orbit pivot.
+function useSplatBounds(src: string): SplatBounds | null {
+  const [bounds, setBounds] = useState<SplatBounds | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setBounds(null);
+
+    fetch(src)
+      .then((r) => r.arrayBuffer())
+      .then((buf) => {
+        if (!active) return;
+        const ROW = 32;
+        const count = Math.floor(buf.byteLength / ROW);
+        if (count === 0) return;
+        const dv = new DataView(buf);
+
+        // Pass 1: centroid (mean position) — stable against a few stray points.
+        let sx = 0, sy = 0, sz = 0;
+        for (let i = 0; i < count; i++) {
+          const o = i * ROW;
+          sx += dv.getFloat32(o, true);
+          sy += dv.getFloat32(o + 4, true);
+          sz += dv.getFloat32(o + 8, true);
+        }
+        const cx = sx / count, cy = sy / count, cz = sz / count;
+
+        // Pass 2: radial distance per point, then take the 90th percentile as
+        // the framing radius. Using a percentile (not max/bbox) ignores the
+        // stray outlier points splats often have, while reflecting true extent.
+        const dists = new Float64Array(count);
+        for (let i = 0; i < count; i++) {
+          const o = i * ROW;
+          const dx = dv.getFloat32(o, true) - cx;
+          const dy = dv.getFloat32(o + 4, true) - cy;
+          const dz = dv.getFloat32(o + 8, true) - cz;
+          dists[i] = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+        dists.sort();
+        const radius = dists[Math.floor(count * 0.9)] || 1;
+
+        setBounds({ center: [cx, cy, cz], radius });
+      })
+      .catch(() => {
+        /* leave defaults; the splat still renders, just not auto-framed */
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [src]);
+
+  return bounds;
+}
+
+// Once bounds are known, place the camera and the orbit target on the object's
+// real center and call controls.update() so OrbitControls re-derives its orbit
+// from the new framing.
+function CameraRig({ bounds }: { bounds: SplatBounds | null }) {
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as
+    | { target: { set: (x: number, y: number, z: number) => void }; update: () => void }
+    | null;
+
+  useEffect(() => {
+    if (!bounds) return;
+    // drei's SplatLoader rotates splats 180° about X (Y-down -> Y-up), so the
+    // rendered center is the raw centroid with Y and Z negated.
+    const [rx, ry, rz] = [bounds.center[0], -bounds.center[1], -bounds.center[2]];
+    // Distance to fit `radius` in a 50° vertical FOV: r / sin(fov/2).
+    // The 0.8 factor frames a bit tighter so the object fills the view.
+    const fovRad = (50 * Math.PI) / 180;
+    const dist = (bounds.radius / Math.sin(fovRad / 2)) * 0.8;
+
+    camera.position.set(rx, ry, rz + dist);
+    camera.near = Math.max(dist / 1000, 0.001);
+    camera.far = dist * 100;
+    camera.updateProjectionMatrix();
+
+    if (controls?.target) {
+      controls.target.set(rx, ry, rz);
+      controls.update();
+    }
+  }, [bounds, camera, controls]);
+
+  return null;
+}
+
 function SplatScene({ src }: { src: string }) {
+  const bounds = useSplatBounds(src);
+
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 0, 4]} fov={50} />
-      {/* Damped orbit: drag to rotate, scroll to zoom, right-drag to pan.
-          makeDefault so the controls own the camera; damping for a smoother feel. */}
+      {/* Damped orbit: drag to rotate, scroll to zoom, right-drag to pan. */}
       <OrbitControls
         makeDefault
         enablePan
@@ -34,10 +131,10 @@ function SplatScene({ src }: { src: string }) {
         enableRotate
         enableDamping
         dampingFactor={0.1}
-        minDistance={0.5}
-        maxDistance={50}
-        target={[0, 0, 0]}
+        minDistance={0.01}
+        maxDistance={100000}
       />
+      <CameraRig bounds={bounds} />
       <ambientLight intensity={0.6} />
       <directionalLight position={[10, 10, 5]} intensity={1} />
       <Suspense fallback={null}>
