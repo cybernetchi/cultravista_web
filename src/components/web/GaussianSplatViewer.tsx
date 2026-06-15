@@ -41,8 +41,14 @@ interface SplatBounds {
 
 // drei's <Splat> keeps point positions in instanced attributes, so a normal
 // bounding-box can't measure it. Instead we parse the .splat file ourselves
-// (antimatter15 format: 32 bytes/point, xyz float32 at offset 0) to find the
-// true centroid + spread, which we use to aim the camera and orbit pivot.
+// (antimatter15 format: 32 bytes/point, xyz float32 at offset 0).
+//
+// KIRI captures include the whole room, so the *mean* center and a high
+// percentile radius frame the entire scene and leave the object of interest
+// tiny. Instead we use the per-axis MEDIAN as the center (lands in the dense
+// object cluster, ignoring far background) and a small multiple of the MEDIAN
+// radial distance as the framing radius (the dense core), so the camera frames
+// the object and lets the sparse background fall outside the view.
 function useSplatBounds(src: string): SplatBounds | null {
   const [bounds, setBounds] = useState<SplatBounds | null>(null);
 
@@ -59,29 +65,34 @@ function useSplatBounds(src: string): SplatBounds | null {
         if (count === 0) return;
         const dv = new DataView(buf);
 
-        // Pass 1: centroid (mean position) — stable against a few stray points.
-        let sx = 0, sy = 0, sz = 0;
+        // Read all point positions into per-axis arrays.
+        const xs = new Float64Array(count);
+        const ys = new Float64Array(count);
+        const zs = new Float64Array(count);
         for (let i = 0; i < count; i++) {
           const o = i * ROW;
-          sx += dv.getFloat32(o, true);
-          sy += dv.getFloat32(o + 4, true);
-          sz += dv.getFloat32(o + 8, true);
+          xs[i] = dv.getFloat32(o, true);
+          ys[i] = dv.getFloat32(o + 4, true);
+          zs[i] = dv.getFloat32(o + 8, true);
         }
-        const cx = sx / count, cy = sy / count, cz = sz / count;
 
-        // Pass 2: radial distance per point, then take the 90th percentile as
-        // the framing radius. Using a percentile (not max/bbox) ignores the
-        // stray outlier points splats often have, while reflecting true extent.
+        // Per-axis median = a center robust to far-flung background points.
+        const median = (arr: Float64Array) => {
+          const sorted = Float64Array.from(arr).sort();
+          return sorted[Math.floor(count / 2)];
+        };
+        const cx = median(xs), cy = median(ys), cz = median(zs);
+
+        // Median radial distance describes the dense core; frame a small
+        // multiple of it so the object fills the view, not the whole room.
         const dists = new Float64Array(count);
         for (let i = 0; i < count; i++) {
-          const o = i * ROW;
-          const dx = dv.getFloat32(o, true) - cx;
-          const dy = dv.getFloat32(o + 4, true) - cy;
-          const dz = dv.getFloat32(o + 8, true) - cz;
+          const dx = xs[i] - cx, dy = ys[i] - cy, dz = zs[i] - cz;
           dists[i] = Math.sqrt(dx * dx + dy * dy + dz * dz);
         }
         dists.sort();
-        const radius = dists[Math.floor(count * 0.9)] || 1;
+        const medianRadial = dists[Math.floor(count * 0.5)] || 1;
+        const radius = medianRadial * 1.8;
 
         setBounds({ center: [cx, cy, cz], radius });
       })
