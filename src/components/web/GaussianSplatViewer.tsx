@@ -44,6 +44,12 @@ interface SplatBounds {
   radius: number;
 }
 
+interface SplatData {
+  bounds: SplatBounds;
+  // All point positions in rendered (flipped) world space, packed xyz.
+  points: Float32Array;
+}
+
 // drei's <Splat> keeps point positions in instanced attributes, so a normal
 // bounding-box can't measure it. Instead we parse the .splat file ourselves
 // (antimatter15 format: 32 bytes/point, xyz float32 at offset 0).
@@ -54,12 +60,12 @@ interface SplatBounds {
 // object cluster, ignoring far background) and a small multiple of the MEDIAN
 // radial distance as the framing radius (the dense core), so the camera frames
 // the object and lets the sparse background fall outside the view.
-function useSplatBounds(src: string): SplatBounds | null {
-  const [bounds, setBounds] = useState<SplatBounds | null>(null);
+function useSplatData(src: string): SplatData | null {
+  const [data, setData] = useState<SplatData | null>(null);
 
   useEffect(() => {
     let active = true;
-    setBounds(null);
+    setData(null);
 
     fetch(src)
       .then((r) => r.arrayBuffer())
@@ -95,7 +101,16 @@ function useSplatBounds(src: string): SplatBounds | null {
         const medianRadial = dists[Math.floor(count * 0.5)] || 1;
         const radius = medianRadial * 1.8;
 
-        setBounds({ center: [cx, cy, cz], radius });
+        // Keep the points (in rendered, flipped space) so click-to-place can
+        // snap a hotspot onto the nearest real surface point along the click ray.
+        const points = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+          points[3 * i] = xs[i];
+          points[3 * i + 1] = -ys[i];
+          points[3 * i + 2] = -zs[i];
+        }
+
+        setData({ bounds: { center: [cx, cy, cz], radius }, points });
       })
       .catch(() => {
         /* leave defaults; the splat still renders, just not auto-framed */
@@ -106,7 +121,39 @@ function useSplatBounds(src: string): SplatBounds | null {
     };
   }, [src]);
 
-  return bounds;
+  return data;
+}
+
+// Given a click ray and the splat point cloud (rendered space), return the
+// front-most real surface point near the ray — so a hotspot anchors to actual
+// geometry and stays put as the camera moves.
+function findSurfacePoint(
+  ray: { origin: Vector3; direction: Vector3 },
+  points: Float32Array,
+  threshold: number
+): [number, number, number] | null {
+  const ox = ray.origin.x, oy = ray.origin.y, oz = ray.origin.z;
+  const dx = ray.direction.x, dy = ray.direction.y, dz = ray.direction.z;
+  const t2 = threshold * threshold;
+  const n = points.length / 3;
+
+  let bestT = Infinity, bestIdx = -1; // nearest-camera point within threshold
+  let fbPerp = Infinity, fbIdx = -1; // global closest-to-ray fallback
+
+  for (let i = 0; i < n; i++) {
+    const px = points[3 * i] - ox;
+    const py = points[3 * i + 1] - oy;
+    const pz = points[3 * i + 2] - oz;
+    const t = px * dx + py * dy + pz * dz; // projection along the ray
+    if (t <= 0) continue; // behind the camera
+    const perp2 = px * px + py * py + pz * pz - t * t;
+    if (perp2 < fbPerp) { fbPerp = perp2; fbIdx = i; }
+    if (perp2 < t2 && t < bestT) { bestT = t; bestIdx = i; }
+  }
+
+  const idx = bestIdx >= 0 ? bestIdx : fbIdx;
+  if (idx < 0) return null;
+  return [points[3 * idx], points[3 * idx + 1], points[3 * idx + 2]];
 }
 
 // The rendered center accounts for drei's 180°-about-X load flip (Y/Z negated).
@@ -181,9 +228,11 @@ function Markers({
 // Gaussian splats themselves can't be reliably raycast.
 function PlacementTarget({
   bounds,
+  points,
   onPlace,
 }: {
   bounds: SplatBounds | null;
+  points: Float32Array | null;
   onPlace: (p: [number, number, number]) => void;
 }) {
   if (!bounds) return null;
@@ -195,10 +244,15 @@ function PlacementTarget({
         // e.delta distinguishes a click from an orbit drag.
         if (e.delta > 6) return;
         e.stopPropagation();
-        onPlace([e.point.x, e.point.y, e.point.z]);
+        // Snap to the nearest real surface point along the click ray; fall back
+        // to the sphere intersection if the cloud isn't available.
+        const snapped = points
+          ? findSurfacePoint(e.ray, points, bounds.radius * 0.08)
+          : null;
+        onPlace(snapped ?? [e.point.x, e.point.y, e.point.z]);
       }}
     >
-      <sphereGeometry args={[bounds.radius * 1.1, 32, 32]} />
+      <sphereGeometry args={[bounds.radius * 1.4, 32, 32]} />
       <meshBasicMaterial transparent opacity={0} depthWrite={false} />
     </mesh>
   );
@@ -302,7 +356,9 @@ function SplatScene({
 }) {
   // Route remote splats through the CORS-enabling proxy before loading/parsing.
   const loadUrl = resolveSplatUrl(src);
-  const bounds = useSplatBounds(loadUrl);
+  const data = useSplatData(loadUrl);
+  const bounds = data?.bounds ?? null;
+  const points = data?.points ?? null;
 
   return (
     <>
@@ -326,7 +382,7 @@ function SplatScene({
         <Splat src={loadUrl} alphaTest={0.1} position={[0, 0, 0]} />
       </Suspense>
       {mode === "edit" && onPlacePoint && (
-        <PlacementTarget bounds={bounds} onPlace={onPlacePoint} />
+        <PlacementTarget bounds={bounds} points={points} onPlace={onPlacePoint} />
       )}
       <Markers annotations={annotations} selectedId={selectedId} onSelect={onSelectAnnotation} />
     </>
