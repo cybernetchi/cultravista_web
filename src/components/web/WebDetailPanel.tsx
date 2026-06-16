@@ -14,12 +14,18 @@ import {
   Image,
   Scale,
   Tag,
-  Languages
+  Languages,
+  Play,
+  ChevronLeft,
+  ChevronRight,
+  MapPin as MapPinIcon
 } from "lucide-react";
 // (MoreHorizontal removed with the fake stats/actions cleanup)
 import { Button } from "@/components/ui/button";
 import { GaussianSplatViewer } from "./GaussianSplatViewer";
-import { useState } from "react";
+import { AnnotationService } from "@/services/annotationService";
+import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 
 interface WebDetailPanelProps {
   scan: Scan;
@@ -31,6 +37,56 @@ interface WebDetailPanelProps {
 export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailPanelProps) {
   const [viewMode, setViewMode] = useState<"image" | "3d">(scan.splatUrl ? "3d" : "image");
   const [lang, setLang] = useState<"en" | "zh">("en");
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const [tourIndex, setTourIndex] = useState<number | null>(null);
+
+  // Load this capture's hotspots.
+  const { data: annotations = [] } = useQuery({
+    queryKey: ["annotations", scan.id],
+    queryFn: async () => {
+      const res = await AnnotationService.getAnnotations(scan.id);
+      if (!res.success) throw new Error(res.error);
+      return res.data ?? [];
+    },
+  });
+
+  // The hotspot currently shown in the side panel (tour stop or manual select).
+  const activeAnnotation =
+    tourIndex != null
+      ? annotations[tourIndex] ?? null
+      : annotations.find((a) => a.id === selectedAnnotationId) ?? null;
+
+  // Auto-advance the tour every few seconds.
+  useEffect(() => {
+    if (tourIndex == null) return;
+    const t = setTimeout(() => {
+      setTourIndex((idx) => (idx == null ? null : idx + 1 < annotations.length ? idx + 1 : null));
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [tourIndex, annotations.length]);
+
+  const startTour = () => {
+    if (annotations.length === 0) return;
+    setSelectedAnnotationId(null);
+    setViewMode("3d");
+    setTourIndex(0);
+  };
+  const stepTour = (dir: -1 | 1) => {
+    setTourIndex((idx) => {
+      if (idx == null) return idx;
+      const next = idx + dir;
+      return next >= 0 && next < annotations.length ? next : idx;
+    });
+  };
+  const exitTour = () => setTourIndex(null);
+
+  // Localized text for the active hotspot.
+  const annTitle = activeAnnotation
+    ? (lang === "zh" && activeAnnotation.titleZhHant ? activeAnnotation.titleZhHant : activeAnnotation.title)
+    : null;
+  const annBody = activeAnnotation
+    ? (lang === "zh" && activeAnnotation.bodyZhHant ? activeAnnotation.bodyZhHant : activeAnnotation.body)
+    : null;
 
   // Whether Traditional Chinese content exists to offer a language toggle.
   const hasZh = Boolean(scan.titleZhHant || scan.descriptionZhHant);
@@ -107,6 +163,14 @@ export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailP
                 src={scan.splatUrl}
                 title={displayTitle}
                 className="absolute inset-0 rounded-none border-0"
+                annotations={annotations}
+                mode="view"
+                selectedId={activeAnnotation?.id ?? null}
+                onSelectAnnotation={(id) => {
+                  setTourIndex(null);
+                  setSelectedAnnotationId(id);
+                }}
+                tourIndex={tourIndex}
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center p-8">
@@ -188,6 +252,43 @@ export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailP
                 </div>
               )}
             </div>
+
+            {/* Spatial story / hotspots + tour */}
+            {annotations.length > 0 && (
+              <div className="py-4 border-b border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <MapPinIcon className="w-4 h-4 text-primary" />
+                    Hotspots ({annotations.length})
+                  </h4>
+                  {tourIndex == null ? (
+                    <Button size="sm" variant="captureOutline" className="h-7 gap-1.5" onClick={startTour}>
+                      <Play className="w-3.5 h-3.5" />
+                      Play tour
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => stepTour(-1)} disabled={tourIndex === 0}>
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-xs text-muted-foreground">{tourIndex + 1}/{annotations.length}</span>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => stepTour(1)} disabled={tourIndex === annotations.length - 1}>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7" onClick={exitTour}>Exit</Button>
+                    </div>
+                  )}
+                </div>
+                {activeAnnotation ? (
+                  <div className="rounded-lg bg-secondary/50 p-3">
+                    <p className="font-medium text-foreground text-sm">{annTitle || "Untitled hotspot"}</p>
+                    {annBody && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{annBody}</p>}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Click a numbered marker, or play the tour.</p>
+                )}
+              </div>
+            )}
 
             {/* Description */}
             <div className="py-4">

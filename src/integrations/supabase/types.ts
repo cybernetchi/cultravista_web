@@ -14,6 +14,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      annotations: {
+        Row: {
+          body: string | null
+          body_zh_hant: string | null
+          camera_pose: Json | null
+          capture_id: string
+          created_at: string
+          id: string
+          order_index: number
+          owner_id: string | null
+          position_x: number
+          position_y: number
+          position_z: number
+          title: string | null
+          title_zh_hant: string | null
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          body_zh_hant?: string | null
+          camera_pose?: Json | null
+          capture_id: string
+          created_at?: string
+          id?: string
+          order_index?: number
+          owner_id?: string | null
+          position_x: number
+          position_y: number
+          position_z: number
+          title?: string | null
+          title_zh_hant?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          body_zh_hant?: string | null
+          camera_pose?: Json | null
+          capture_id?: string
+          created_at?: string
+          id?: string
+          order_index?: number
+          owner_id?: string | null
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          title?: string | null
+          title_zh_hant?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annotations_capture_id_fkey"
+            columns: ["capture_id"]
+            isOneToOne: false
+            referencedRelation: "captures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       captures: {
         Row: {
           attribution: string | null

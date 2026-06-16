@@ -109,6 +109,25 @@ CREATE TABLE public.collection_captures (
 );
 CREATE INDEX idx_collection_captures_capture_id ON public.collection_captures(capture_id);
 
+-- PR3: spatial hotspot annotations on a capture (3D point + bilingual narration).
+CREATE TABLE public.annotations (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  capture_id UUID NOT NULL REFERENCES public.captures(id) ON DELETE CASCADE,
+  owner_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  position_x DOUBLE PRECISION NOT NULL,
+  position_y DOUBLE PRECISION NOT NULL,
+  position_z DOUBLE PRECISION NOT NULL,
+  camera_pose JSONB,
+  title TEXT,
+  title_zh_hant TEXT,
+  body TEXT,
+  body_zh_hant TEXT,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_annotations_capture_order ON public.annotations(capture_id, order_index);
+
 CREATE INDEX idx_captures_org_id ON public.captures(org_id);
 CREATE INDEX idx_captures_owner_id ON public.captures(owner_id);
 
@@ -127,6 +146,9 @@ CREATE TRIGGER update_captures_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_collections_updated_at
   BEFORE UPDATE ON public.collections
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER update_annotations_updated_at
+  BEFORE UPDATE ON public.annotations
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ----------------------------------------------------------------------------
@@ -196,6 +218,7 @@ ALTER TABLE public.memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.captures ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.collection_captures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.annotations ENABLE ROW LEVEL SECURITY;
 
 -- captures: org-scoped read/write, admin-only delete.
 CREATE POLICY "Org members can view captures"
@@ -259,6 +282,26 @@ CREATE POLICY "Org members can remove collection links"
   ON public.collection_captures FOR DELETE TO authenticated
   USING (EXISTS (SELECT 1 FROM public.collections c
     WHERE c.id = collection_id AND public.is_org_member(c.org_id)));
+
+-- annotations: gated by membership of the parent capture's org.
+CREATE POLICY "Org members can view annotations"
+  ON public.annotations FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.captures c
+    WHERE c.id = capture_id AND public.is_org_member(c.org_id)));
+CREATE POLICY "Org members can create annotations"
+  ON public.annotations FOR INSERT TO authenticated
+  WITH CHECK (owner_id = auth.uid() AND EXISTS (SELECT 1 FROM public.captures c
+    WHERE c.id = capture_id AND public.is_org_member(c.org_id)));
+CREATE POLICY "Org members can update annotations"
+  ON public.annotations FOR UPDATE TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.captures c
+    WHERE c.id = capture_id AND public.is_org_member(c.org_id)))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.captures c
+    WHERE c.id = capture_id AND public.is_org_member(c.org_id)));
+CREATE POLICY "Org members can delete annotations"
+  ON public.annotations FOR DELETE TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.captures c
+    WHERE c.id = capture_id AND public.is_org_member(c.org_id)));
 
 -- ----------------------------------------------------------------------------
 -- Storage: public read (asset/thumbnail delivery + iframe viewer),

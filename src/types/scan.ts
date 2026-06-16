@@ -23,6 +23,18 @@ export interface Scan {
   source?: string;
 }
 
+// A 3D hotspot anchored on a capture (PR3). Positions are rendered world-space.
+export interface Annotation {
+  id: string;
+  position: [number, number, number];
+  cameraPose?: { position: [number, number, number]; target: [number, number, number] } | null;
+  title?: string | null;
+  titleZhHant?: string | null;
+  body?: string | null;
+  bodyZhHant?: string | null;
+  orderIndex: number;
+}
+
 export type ViewMode = 'library' | 'detail' | 'edit' | 'annotate' | 'capture';
 
 export type CaptureState = 'idle' | 'pre' | 'capturing' | 'processing' | 'complete';

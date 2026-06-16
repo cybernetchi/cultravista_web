@@ -1,24 +1,29 @@
-import { Canvas, useThree } from "@react-three/fiber";
-import { Splat, OrbitControls, PerspectiveCamera } from "@react-three/drei";
-import { Suspense, useEffect, useState } from "react";
+import { Canvas, useThree, useFrame, ThreeEvent } from "@react-three/fiber";
+import { Splat, OrbitControls, PerspectiveCamera, Html } from "@react-three/drei";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { Vector3 } from "three";
 import { Button } from "@/components/ui/button";
-import { 
-  RotateCcw, 
-  ZoomIn, 
-  ZoomOut, 
-  Maximize2, 
-  Minimize2,
-  Move3D,
-  Eye,
-  Loader2
-} from "lucide-react";
+import { Maximize2, Minimize2, Move3D, Eye, ZoomIn, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Annotation } from "@/types/scan";
 
 interface GaussianSplatViewerProps {
   src: string;
   className?: string;
   onClose?: () => void;
   title?: string;
+  /** Hotspots to render as markers. */
+  annotations?: Annotation[];
+  /** "edit" enables click-to-place; "view" is read-only. */
+  mode?: "view" | "edit";
+  selectedId?: string | null;
+  onSelectAnnotation?: (id: string) => void;
+  /** Called in edit mode when the user clicks the object to drop a marker. */
+  onPlacePoint?: (p: [number, number, number]) => void;
+  /** When set, fly the camera to this annotation index (tour playback). */
+  tourIndex?: number | null;
+  /** Receives the current camera pose (for "set camera view"). */
+  onCameraPoseRef?: (getter: () => Annotation["cameraPose"]) => void;
 }
 
 // Remote (http) splats must be loaded through the Supabase `proxy` edge function:
@@ -65,7 +70,6 @@ function useSplatBounds(src: string): SplatBounds | null {
         if (count === 0) return;
         const dv = new DataView(buf);
 
-        // Read all point positions into per-axis arrays.
         const xs = new Float64Array(count);
         const ys = new Float64Array(count);
         const zs = new Float64Array(count);
@@ -76,15 +80,12 @@ function useSplatBounds(src: string): SplatBounds | null {
           zs[i] = dv.getFloat32(o + 8, true);
         }
 
-        // Per-axis median = a center robust to far-flung background points.
         const median = (arr: Float64Array) => {
           const sorted = Float64Array.from(arr).sort();
           return sorted[Math.floor(count / 2)];
         };
         const cx = median(xs), cy = median(ys), cz = median(zs);
 
-        // Median radial distance describes the dense core; frame a small
-        // multiple of it so the object fills the view, not the whole room.
         const dists = new Float64Array(count);
         for (let i = 0; i < count; i++) {
           const dx = xs[i] - cx, dy = ys[i] - cy, dz = zs[i] - cz;
@@ -108,9 +109,13 @@ function useSplatBounds(src: string): SplatBounds | null {
   return bounds;
 }
 
-// Once bounds are known, place the camera and the orbit target on the object's
-// real center and call controls.update() so OrbitControls re-derives its orbit
-// from the new framing.
+// The rendered center accounts for drei's 180°-about-X load flip (Y/Z negated).
+function renderedCenter(bounds: SplatBounds | null): Vector3 {
+  if (!bounds) return new Vector3(0, 0, 0);
+  return new Vector3(bounds.center[0], -bounds.center[1], -bounds.center[2]);
+}
+
+// Frame the camera/orbit pivot on the object once bounds are known.
 function CameraRig({ bounds }: { bounds: SplatBounds | null }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as
@@ -119,21 +124,17 @@ function CameraRig({ bounds }: { bounds: SplatBounds | null }) {
 
   useEffect(() => {
     if (!bounds) return;
-    // drei's SplatLoader rotates splats 180° about X (Y-down -> Y-up), so the
-    // rendered center is the raw centroid with Y and Z negated.
-    const [rx, ry, rz] = [bounds.center[0], -bounds.center[1], -bounds.center[2]];
-    // Distance to fit `radius` in a 50° vertical FOV: r / sin(fov/2).
-    // The 0.8 factor frames a bit tighter so the object fills the view.
+    const c = renderedCenter(bounds);
     const fovRad = (50 * Math.PI) / 180;
     const dist = (bounds.radius / Math.sin(fovRad / 2)) * 0.8;
 
-    camera.position.set(rx, ry, rz + dist);
+    camera.position.set(c.x, c.y, c.z + dist);
     camera.near = Math.max(dist / 1000, 0.001);
     camera.far = dist * 100;
     camera.updateProjectionMatrix();
 
     if (controls?.target) {
-      controls.target.set(rx, ry, rz);
+      controls.target.set(c.x, c.y, c.z);
       controls.update();
     }
   }, [bounds, camera, controls]);
@@ -141,7 +142,164 @@ function CameraRig({ bounds }: { bounds: SplatBounds | null }) {
   return null;
 }
 
-function SplatScene({ src }: { src: string }) {
+// Renders a numbered marker per annotation as a screen-space dot button.
+function Markers({
+  annotations,
+  selectedId,
+  onSelect,
+}: {
+  annotations: Annotation[];
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
+}) {
+  return (
+    <>
+      {annotations.map((a, i) => (
+        <Html key={a.id} position={a.position} center zIndexRange={[100, 0]} occlude={false}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect?.(a.id);
+            }}
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold shadow-lg transition-transform hover:scale-110",
+              selectedId === a.id
+                ? "border-white bg-primary text-primary-foreground scale-110"
+                : "border-white/80 bg-primary/80 text-primary-foreground"
+            )}
+            title={a.title ?? `Hotspot ${i + 1}`}
+          >
+            {i + 1}
+          </button>
+        </Html>
+      ))}
+    </>
+  );
+}
+
+// Invisible bounding sphere used as a raycast proxy for click-to-place, since
+// Gaussian splats themselves can't be reliably raycast.
+function PlacementTarget({
+  bounds,
+  onPlace,
+}: {
+  bounds: SplatBounds | null;
+  onPlace: (p: [number, number, number]) => void;
+}) {
+  if (!bounds) return null;
+  const c = renderedCenter(bounds);
+  return (
+    <mesh
+      position={[c.x, c.y, c.z]}
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        // e.delta distinguishes a click from an orbit drag.
+        if (e.delta > 6) return;
+        e.stopPropagation();
+        onPlace([e.point.x, e.point.y, e.point.z]);
+      }}
+    >
+      <sphereGeometry args={[bounds.radius * 1.1, 32, 32]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+    </mesh>
+  );
+}
+
+// Flies the camera to the active tour stop; frees orbit when tourIndex is null.
+function TourController({
+  annotations,
+  tourIndex,
+  bounds,
+}: {
+  annotations: Annotation[];
+  tourIndex: number | null | undefined;
+  bounds: SplatBounds | null;
+}) {
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as
+    | { target: Vector3; update: () => void; enabled: boolean }
+    | null;
+  const goal = useRef<{ pos: Vector3; tgt: Vector3 } | null>(null);
+
+  useEffect(() => {
+    const active = tourIndex != null && annotations[tourIndex];
+    if (!active) {
+      goal.current = null;
+      if (controls) controls.enabled = true;
+      return;
+    }
+    const a = annotations[tourIndex as number];
+    const center = renderedCenter(bounds);
+    const marker = new Vector3(a.position[0], a.position[1], a.position[2]);
+
+    let pos: Vector3;
+    let tgt: Vector3;
+    if (a.cameraPose) {
+      pos = new Vector3(...a.cameraPose.position);
+      tgt = new Vector3(...a.cameraPose.target);
+    } else {
+      tgt = marker.clone();
+      const dir = marker.clone().sub(center);
+      if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+      dir.normalize();
+      const d = (bounds?.radius ?? 1) * 1.4;
+      pos = marker.clone().add(dir.multiplyScalar(d));
+      pos.y += (bounds?.radius ?? 1) * 0.15;
+    }
+    goal.current = { pos, tgt };
+    if (controls) controls.enabled = false;
+  }, [tourIndex, annotations, bounds, controls]);
+
+  useFrame(() => {
+    const g = goal.current;
+    if (!g || !controls) return;
+    camera.position.lerp(g.pos, 0.08);
+    controls.target.lerp(g.tgt, 0.08);
+    controls.update();
+  });
+
+  return null;
+}
+
+// Exposes a getter for the current camera pose (used by "set camera view").
+function CameraPoseProbe({
+  onReady,
+}: {
+  onReady: (getter: () => Annotation["cameraPose"]) => void;
+}) {
+  const camera = useThree((s) => s.camera);
+  const controls = useThree((s) => s.controls) as { target: Vector3 } | null;
+
+  useEffect(() => {
+    onReady(() => ({
+      position: [camera.position.x, camera.position.y, camera.position.z],
+      target: controls?.target
+        ? [controls.target.x, controls.target.y, controls.target.z]
+        : [0, 0, 0],
+    }));
+  }, [camera, controls, onReady]);
+
+  return null;
+}
+
+function SplatScene({
+  src,
+  annotations,
+  mode,
+  selectedId,
+  onSelectAnnotation,
+  onPlacePoint,
+  tourIndex,
+  onCameraPoseRef,
+}: {
+  src: string;
+  annotations: Annotation[];
+  mode: "view" | "edit";
+  selectedId?: string | null;
+  onSelectAnnotation?: (id: string) => void;
+  onPlacePoint?: (p: [number, number, number]) => void;
+  tourIndex?: number | null;
+  onCameraPoseRef?: (getter: () => Annotation["cameraPose"]) => void;
+}) {
   // Route remote splats through the CORS-enabling proxy before loading/parsing.
   const loadUrl = resolveSplatUrl(src);
   const bounds = useSplatBounds(loadUrl);
@@ -149,7 +307,6 @@ function SplatScene({ src }: { src: string }) {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 0, 4]} fov={50} />
-      {/* Damped orbit: drag to rotate, scroll to zoom, right-drag to pan. */}
       <OrbitControls
         makeDefault
         enablePan
@@ -161,11 +318,17 @@ function SplatScene({ src }: { src: string }) {
         maxDistance={100000}
       />
       <CameraRig bounds={bounds} />
+      <TourController annotations={annotations} tourIndex={tourIndex} bounds={bounds} />
+      {onCameraPoseRef && <CameraPoseProbe onReady={onCameraPoseRef} />}
       <ambientLight intensity={0.6} />
       <directionalLight position={[10, 10, 5]} intensity={1} />
       <Suspense fallback={null}>
         <Splat src={loadUrl} alphaTest={0.1} position={[0, 0, 0]} />
       </Suspense>
+      {mode === "edit" && onPlacePoint && (
+        <PlacementTarget bounds={bounds} onPlace={onPlacePoint} />
+      )}
+      <Markers annotations={annotations} selectedId={selectedId} onSelect={onSelectAnnotation} />
     </>
   );
 }
@@ -180,18 +343,22 @@ function LoadingOverlay() {
   );
 }
 
-export function GaussianSplatViewer({ 
-  src, 
-  className, 
-  onClose,
-  title = "3D Viewer"
+export function GaussianSplatViewer({
+  src,
+  className,
+  title = "3D Viewer",
+  annotations = [],
+  mode = "view",
+  selectedId = null,
+  onSelectAnnotation,
+  onPlacePoint,
+  tourIndex = null,
+  onCameraPoseRef,
 }: GaussianSplatViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
+  const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
 
   return (
     <div className={cn(
@@ -217,22 +384,35 @@ export function GaussianSplatViewer({
         </div>
       </div>
 
+      {/* Edit-mode hint */}
+      {mode === "edit" && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full bg-card/90 backdrop-blur-sm border border-border text-xs text-muted-foreground">
+          Click the object to place a hotspot
+        </div>
+      )}
+
       {/* Canvas */}
       <div className="w-full h-full min-h-[400px]">
         {isLoading && <LoadingOverlay />}
         <Canvas
           gl={{ antialias: true, alpha: true }}
-          onCreated={() => {
-            // Give a small delay for the splat to load
-            setTimeout(() => setIsLoading(false), 1500);
-          }}
+          onCreated={() => setTimeout(() => setIsLoading(false), 1500)}
           className="w-full h-full"
         >
-          <SplatScene src={src} />
+          <SplatScene
+            src={src}
+            annotations={annotations}
+            mode={mode}
+            selectedId={selectedId}
+            onSelectAnnotation={onSelectAnnotation}
+            onPlacePoint={onPlacePoint}
+            tourIndex={tourIndex}
+            onCameraPoseRef={onCameraPoseRef}
+          />
         </Canvas>
       </div>
 
-      {/* Controls overlay */}
+      {/* Controls hint */}
       <div className="absolute bottom-0 left-0 right-0 z-20 p-3 bg-gradient-to-t from-background/90 to-transparent">
         <div className="flex items-center justify-center gap-2">
           <div className="flex items-center gap-1 px-3 py-1.5 bg-card/80 backdrop-blur-sm rounded-full border border-border">
@@ -250,7 +430,7 @@ export function GaussianSplatViewer({
 
       {/* Fullscreen backdrop */}
       {isFullscreen && (
-        <div 
+        <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm -z-10"
           onClick={toggleFullscreen}
         />
