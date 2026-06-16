@@ -1,7 +1,16 @@
 import { Canvas, useThree, useFrame, ThreeEvent } from "@react-three/fiber";
 import { Splat, OrbitControls, PerspectiveCamera, Html } from "@react-three/drei";
-import { Suspense, useEffect, useRef, useState } from "react";
-import { Vector3 } from "three";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Vector3,
+  BufferGeometry,
+  BufferAttribute,
+  ShaderMaterial,
+  Points,
+  Scene,
+  WebGLRenderTarget,
+  Color,
+} from "three";
 import { Button } from "@/components/ui/button";
 import { Maximize2, Minimize2, Move3D, Eye, ZoomIn, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -124,9 +133,14 @@ function useSplatData(src: string): SplatData | null {
   return data;
 }
 
-// Given a click ray and the splat point cloud (rendered space), return the
-// front-most real surface point near the ray — so a hotspot anchors to actual
-// geometry and stays put as the camera moves.
+// Given a click ray and the splat point cloud (rendered space), return a real
+// surface point near the ray — so a hotspot anchors to actual geometry and
+// stays put as the camera moves.
+//
+// Splats have wispy floaters in front of the solid surface, so we don't take the
+// absolute front-most point (that snaps to a floater). Instead we collect every
+// point within `threshold` of the ray, then take a low DEPTH percentile: this
+// skips the sparse front floaters and lands on the dense visible surface.
 function findSurfacePoint(
   ray: { origin: Vector3; direction: Vector3 },
   points: Float32Array,
@@ -137,7 +151,8 @@ function findSurfacePoint(
   const t2 = threshold * threshold;
   const n = points.length / 3;
 
-  let bestT = Infinity, bestIdx = -1; // nearest-camera point within threshold
+  const candT: number[] = []; // depth along ray for each near-ray candidate
+  const candI: number[] = []; // index of each candidate
   let fbPerp = Infinity, fbIdx = -1; // global closest-to-ray fallback
 
   for (let i = 0; i < n; i++) {
@@ -148,11 +163,22 @@ function findSurfacePoint(
     if (t <= 0) continue; // behind the camera
     const perp2 = px * px + py * py + pz * pz - t * t;
     if (perp2 < fbPerp) { fbPerp = perp2; fbIdx = i; }
-    if (perp2 < t2 && t < bestT) { bestT = t; bestIdx = i; }
+    if (perp2 < t2) {
+      candT.push(t);
+      candI.push(i);
+    }
   }
 
-  const idx = bestIdx >= 0 ? bestIdx : fbIdx;
-  if (idx < 0) return null;
+  let idx: number;
+  if (candI.length > 0) {
+    // 10th-percentile depth among near-ray points = the dense front surface.
+    const order = candI.map((_, k) => k).sort((a, b) => candT[a] - candT[b]);
+    idx = candI[order[Math.floor(order.length * 0.1)]];
+  } else if (fbIdx >= 0) {
+    idx = fbIdx;
+  } else {
+    return null;
+  }
   return [points[3 * idx], points[3 * idx + 1], points[3 * idx + 2]];
 }
 
@@ -226,7 +252,33 @@ function Markers({
 
 // Invisible bounding sphere used as a raycast proxy for click-to-place, since
 // Gaussian splats themselves can't be reliably raycast.
-function PlacementTarget({
+// GPU "ID buffer" picking: render the point cloud to an offscreen pass where
+// each point's color encodes its index, with depth testing on. Reading back the
+// pixel under the click gives the front-most real point at exactly that pixel —
+// pixel-perfect placement that doesn't depend on the splat material's depth.
+const PICK_VERT = `
+  attribute float aIndex;
+  varying float vIndex;
+  uniform float uSize;
+  void main() {
+    vIndex = aIndex;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = uSize;
+  }
+`;
+const PICK_FRAG = `
+  precision highp float;
+  varying float vIndex;
+  void main() {
+    float idx = vIndex;
+    float r = mod(idx, 256.0);
+    float g = mod(floor(idx / 256.0), 256.0);
+    float b = mod(floor(idx / 65536.0), 256.0);
+    gl_FragColor = vec4(r / 255.0, g / 255.0, b / 255.0, 1.0);
+  }
+`;
+
+function PlacementPicker({
   bounds,
   points,
   onPlace,
@@ -235,24 +287,90 @@ function PlacementTarget({
   points: Float32Array | null;
   onPlace: (p: [number, number, number]) => void;
 }) {
+  const gl = useThree((s) => s.gl);
+  const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
+
+  // Build the picking scene/target once per point cloud.
+  const pick = useMemo(() => {
+    if (!points) return null;
+    const n = points.length / 3;
+    const geo = new BufferGeometry();
+    geo.setAttribute("position", new BufferAttribute(points, 3));
+    const idx = new Float32Array(n);
+    for (let i = 0; i < n; i++) idx[i] = i;
+    geo.setAttribute("aIndex", new BufferAttribute(idx, 1));
+    const mat = new ShaderMaterial({
+      vertexShader: PICK_VERT,
+      fragmentShader: PICK_FRAG,
+      uniforms: { uSize: { value: 5 * gl.getPixelRatio() } },
+    });
+    const scene = new Scene();
+    scene.add(new Points(geo, mat));
+    const target = new WebGLRenderTarget(1, 1);
+    return { scene, target, geo, mat, buffer: new Uint8Array(4) };
+  }, [points, gl]);
+
+  useEffect(() => {
+    return () => {
+      if (pick) {
+        pick.geo.dispose();
+        pick.mat.dispose();
+        pick.target.dispose();
+      }
+    };
+  }, [pick]);
+
+  // Render the id/depth pass and read back the front-most point at an NDC
+  // coordinate (-1..1). Returns a real cloud point or null on a miss.
+  const gpuPick = (ndcX: number, ndcY: number): [number, number, number] | null => {
+    if (!pick || !points) return null;
+    const dpr = gl.getPixelRatio();
+    const w = Math.max(1, Math.floor(size.width * dpr));
+    const h = Math.max(1, Math.floor(size.height * dpr));
+    pick.target.setSize(w, h);
+
+    // NDC +y is up and GL pixel origin is bottom-left, so no Y flip here.
+    const px = Math.min(w - 1, Math.max(0, Math.floor((ndcX * 0.5 + 0.5) * w)));
+    const py = Math.min(h - 1, Math.max(0, Math.floor((ndcY * 0.5 + 0.5) * h)));
+
+    const prevTarget = gl.getRenderTarget();
+    const prevColor = gl.getClearColor(new Color());
+    const prevAlpha = gl.getClearAlpha();
+    gl.setRenderTarget(pick.target);
+    gl.setClearColor(0x000000, 0);
+    gl.clear();
+    gl.render(pick.scene, camera);
+    gl.readRenderTargetPixels(pick.target, px, py, 1, 1, pick.buffer);
+    gl.setRenderTarget(prevTarget);
+    gl.setClearColor(prevColor, prevAlpha);
+
+    const [r, g, b, a] = pick.buffer;
+    if (a === 0) return null;
+    const i = r + g * 256 + b * 65536;
+    if (i < 0 || i >= points.length / 3) return null;
+    return [points[3 * i], points[3 * i + 1], points[3 * i + 2]];
+  };
+
   if (!bounds) return null;
   const c = renderedCenter(bounds);
+
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    if (e.delta > 6) return; // ignore orbit drags
+    e.stopPropagation();
+    const hit = gpuPick(e.pointer.x, e.pointer.y);
+    if (hit) {
+      onPlace(hit);
+      return;
+    }
+    // Fallback: ray-snap, then the sphere intersection.
+    const snapped = points ? findSurfacePoint(e.ray, points, bounds.radius * 0.08) : null;
+    onPlace(snapped ?? [e.point.x, e.point.y, e.point.z]);
+  };
+
   return (
-    <mesh
-      position={[c.x, c.y, c.z]}
-      onClick={(e: ThreeEvent<MouseEvent>) => {
-        // e.delta distinguishes a click from an orbit drag.
-        if (e.delta > 6) return;
-        e.stopPropagation();
-        // Snap to the nearest real surface point along the click ray; fall back
-        // to the sphere intersection if the cloud isn't available.
-        const snapped = points
-          ? findSurfacePoint(e.ray, points, bounds.radius * 0.08)
-          : null;
-        onPlace(snapped ?? [e.point.x, e.point.y, e.point.z]);
-      }}
-    >
-      <sphereGeometry args={[bounds.radius * 1.4, 32, 32]} />
+    <mesh position={[c.x, c.y, c.z]} onClick={handleClick}>
+      <sphereGeometry args={[bounds.radius * 1.5, 32, 32]} />
       <meshBasicMaterial transparent opacity={0} depthWrite={false} />
     </mesh>
   );
@@ -382,7 +500,7 @@ function SplatScene({
         <Splat src={loadUrl} alphaTest={0.1} position={[0, 0, 0]} />
       </Suspense>
       {mode === "edit" && onPlacePoint && (
-        <PlacementTarget bounds={bounds} points={points} onPlace={onPlacePoint} />
+        <PlacementPicker bounds={bounds} points={points} onPlace={onPlacePoint} />
       )}
       <Markers annotations={annotations} selectedId={selectedId} onSelect={onSelectAnnotation} />
     </>
