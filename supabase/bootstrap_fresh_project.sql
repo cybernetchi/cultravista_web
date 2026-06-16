@@ -84,9 +84,13 @@ CREATE TABLE public.captures (
   attribution TEXT,
   tags TEXT[] NOT NULL DEFAULT '{}',
   source TEXT NOT NULL DEFAULT 'kiri', -- 'kiri' | 'upload'
+  -- PR4 publishing
+  published BOOLEAN NOT NULL DEFAULT false,
+  slug TEXT,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX idx_captures_slug ON public.captures(slug);
 
 -- PR2: collections (museum/exhibition grouping) + capture link table.
 CREATE TABLE public.collections (
@@ -302,6 +306,15 @@ CREATE POLICY "Org members can delete annotations"
   ON public.annotations FOR DELETE TO authenticated
   USING (EXISTS (SELECT 1 FROM public.captures c
     WHERE c.id = capture_id AND public.is_org_member(c.org_id)));
+
+-- PR4: public (anon) read for published exhibits + their annotations.
+CREATE POLICY "Public can view published captures"
+  ON public.captures FOR SELECT TO anon, authenticated
+  USING (published = true);
+CREATE POLICY "Public can view published annotations"
+  ON public.annotations FOR SELECT TO anon, authenticated
+  USING (EXISTS (SELECT 1 FROM public.captures c
+    WHERE c.id = capture_id AND c.published = true));
 
 -- ----------------------------------------------------------------------------
 -- Storage: public read (asset/thumbnail delivery + iframe viewer),

@@ -22,10 +22,21 @@ import {
 } from "lucide-react";
 // (MoreHorizontal removed with the fake stats/actions cleanup)
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { GaussianSplatViewer } from "./GaussianSplatViewer";
 import { AnnotationService } from "@/services/annotationService";
-import { useQuery } from "@tanstack/react-query";
+import { CaptureService } from "@/services/captureService";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
+import { Loader2, Copy, Globe } from "lucide-react";
+import { toast } from "sonner";
 
 interface WebDetailPanelProps {
   scan: Scan;
@@ -87,6 +98,38 @@ export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailP
   const annBody = activeAnnotation
     ? (lang === "zh" && activeAnnotation.bodyZhHant ? activeAnnotation.bodyZhHant : activeAnnotation.body)
     : null;
+
+  // ---- Publishing / sharing (PR4) ----
+  const queryClient = useQueryClient();
+  const [published, setPublished] = useState(!!scan.published);
+  const [slug, setSlug] = useState<string | null>(scan.slug ?? null);
+  const [publishBusy, setPublishBusy] = useState(false);
+
+  const exhibitUrl = slug ? `${window.location.origin}/exhibit/${slug}` : "";
+  const embedSnippet = slug
+    ? `<iframe src="${window.location.origin}/iframe-viewer?slug=${slug}" width="100%" height="600" style="border:0" allow="accelerometer; gyroscope; magnetometer"></iframe>`
+    : "";
+
+  const handlePublishToggle = async () => {
+    setPublishBusy(true);
+    const res = published
+      ? await CaptureService.unpublishCapture(scan.id)
+      : await CaptureService.publishCapture(scan.id, scan.title);
+    setPublishBusy(false);
+    if (!res.success || !res.data) {
+      toast.error(res.error || "Action failed");
+      return;
+    }
+    setPublished(res.data.published);
+    setSlug(res.data.slug);
+    queryClient.invalidateQueries({ queryKey: ["captures"] });
+    toast.success(res.data.published ? "Exhibit published" : "Exhibit unpublished");
+  };
+
+  const copy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
 
   // Whether Traditional Chinese content exists to offer a language toggle.
   const hasZh = Boolean(scan.titleZhHant || scan.descriptionZhHant);
@@ -338,10 +381,59 @@ export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailP
               </Button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="secondary" className="gap-2">
-                <Share2 className="w-4 h-4" />
-                Share
-              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="secondary" className="gap-2">
+                    <Share2 className="w-4 h-4" />
+                    Share
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Share exhibit</DialogTitle>
+                    <DialogDescription>
+                      {published
+                        ? "This exhibit is public. Anyone with the link can view it."
+                        : "Publish to make this capture viewable by anyone with the link."}
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4">
+                    <Button
+                      variant={published ? "outline" : "capture"}
+                      className="w-full gap-2"
+                      onClick={handlePublishToggle}
+                      disabled={publishBusy}
+                    >
+                      {publishBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                      {published ? "Unpublish" : "Publish exhibit"}
+                    </Button>
+
+                    {published && slug && (
+                      <>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Exhibit link</label>
+                          <div className="flex gap-2">
+                            <input readOnly value={exhibitUrl} className="flex-1 rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground" />
+                            <Button variant="outline" size="icon" className="shrink-0" onClick={() => copy(exhibitUrl, "Link")}>
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Embed (iframe)</label>
+                          <div className="flex gap-2">
+                            <textarea readOnly value={embedSnippet} rows={3} className="flex-1 rounded-md border border-border bg-secondary/50 px-3 py-2 text-xs font-mono text-foreground resize-none" />
+                            <Button variant="outline" size="icon" className="shrink-0" onClick={() => copy(embedSnippet, "Embed code")}>
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
               <Button variant="secondary" className="gap-2">
                 <Download className="w-4 h-4" />
                 Download

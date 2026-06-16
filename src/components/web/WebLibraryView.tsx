@@ -35,6 +35,8 @@ function captureToScan(capture: Capture): Scan {
     tags: capture.tags,
     source: capture.source,
     location: capture.location_text || undefined,
+    published: capture.published,
+    slug: capture.slug,
   };
 }
 

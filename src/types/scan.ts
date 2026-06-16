@@ -21,6 +21,9 @@ export interface Scan {
   attribution?: string | null;
   tags?: string[];
   source?: string;
+  // PR4 publishing
+  published?: boolean;
+  slug?: string | null;
 }
 
 // A 3D hotspot anchored on a capture (PR3). Positions are rendered world-space.

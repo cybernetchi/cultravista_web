@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import IframeViewer from "./pages/IframeViewer";
+import Exhibit from "./pages/Exhibit";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,8 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               {/* Public embeddable viewer — intentionally unauthenticated. */}
               <Route path="/iframe-viewer" element={<IframeViewer />} />
+              {/* Public exhibit page — published captures only (RLS-enforced). */}
+              <Route path="/exhibit/:slug" element={<Exhibit />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -24,6 +24,8 @@ export interface Capture {
   attribution: string | null;
   tags: string[];
   source: string; // 'kiri' | 'upload'
+  published: boolean; // PR4: visible publicly at /exhibit/:slug
+  slug: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -178,4 +180,77 @@ export class CaptureService {
       };
     }
   }
+
+  // ---- PR4: publishing -----------------------------------------------------
+
+  // Publish a capture as a public exhibit, generating a unique slug from the
+  // title. Retries with a fresh suffix on a slug collision.
+  static async publishCapture(id: string, title: string): Promise<ApiResponse<Capture>> {
+    const base = slugify(title) || 'exhibit';
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const slug = `${base}-${randomSuffix()}`;
+      const { data, error } = await supabase
+        .from('captures')
+        .update({ published: true, slug })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error) return { success: true, data };
+      // 23505 = unique_violation -> try a different suffix.
+      if (error.code !== '23505') {
+        return { success: false, error: error.message };
+      }
+    }
+    return { success: false, error: 'Could not generate a unique exhibit link. Try again.' };
+  }
+
+  // Take an exhibit offline. The slug is kept so re-publishing is stable.
+  static async unpublishCapture(id: string): Promise<ApiResponse<Capture>> {
+    const { data, error } = await supabase
+      .from('captures')
+      .update({ published: false })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
+  }
+
+  // Anon-safe read of a published exhibit by slug (RLS enforces published-only).
+  static async getPublishedCaptureBySlug(slug: string): Promise<ApiResponse<Capture>> {
+    try {
+      const { data, error } = await supabase
+        .from('captures')
+        .select('*')
+        .eq('slug', slug)
+        .eq('published', true)
+        .maybeSingle();
+
+      if (error) return { success: false, error: error.message };
+      if (!data) return { success: false, error: 'Exhibit not found' };
+      return { success: true, data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load exhibit',
+      };
+    }
+  }
+}
+
+// Build a URL-safe slug from a title (lowercase, hyphenated, ASCII-ish).
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 60);
+}
+
+function randomSuffix(): string {
+  return Math.random().toString(36).slice(2, 8);
 }

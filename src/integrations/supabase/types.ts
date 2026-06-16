@@ -88,8 +88,10 @@ export type Database = {
           location_text: string | null
           org_id: string | null
           owner_id: string | null
+          published: boolean
           rights_license: string | null
           serialize: string | null
+          slug: string | null
           source: string
           status: number
           tags: string[]
@@ -112,8 +114,10 @@ export type Database = {
           location_text?: string | null
           org_id?: string | null
           owner_id?: string | null
+          published?: boolean
           rights_license?: string | null
           serialize?: string | null
+          slug?: string | null
           source?: string
           status?: number
           tags?: string[]
@@ -136,8 +140,10 @@ export type Database = {
           location_text?: string | null
           org_id?: string | null
           owner_id?: string | null
+          published?: boolean
           rights_license?: string | null
           serialize?: string | null
+          slug?: string | null
           source?: string
           status?: number
           tags?: string[]
