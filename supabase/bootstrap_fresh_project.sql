@@ -87,6 +87,9 @@ CREATE TABLE public.captures (
   -- PR4 publishing
   published BOOLEAN NOT NULL DEFAULT false,
   slug TEXT,
+  -- PR5 archival/delivery formats (file = .splat delivery default)
+  ply_url TEXT,
+  spz_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );

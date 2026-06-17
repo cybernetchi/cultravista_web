@@ -26,6 +26,8 @@ export interface Capture {
   source: string; // 'kiri' | 'upload'
   published: boolean; // PR4: visible publicly at /exhibit/:slug
   slug: string | null;
+  ply_url: string | null; // PR5: archival original PLY (S3)
+  spz_url: string | null; // PR5: SPZ delivery file (S3)
   created_at: string;
   updated_at: string;
 }
@@ -253,4 +255,21 @@ function slugify(title: string): string {
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 8);
+}
+
+// ---- PR5: delivery format selection ----------------------------------------
+// SPZ rendering is not yet wired into the viewer (the @spz-loader decoder path
+// is validated — see docs/spz-format-decision.md — but integration is deferred
+// until the conversion Lambda emits SPZ). Flip this to true once the viewer
+// decodes SPZ, and delivery will prefer the smaller spz_url automatically.
+export const SPZ_RENDERING_ENABLED = false;
+
+// Best splat URL to hand the viewer: SPZ delivery when enabled + available,
+// otherwise the legacy antimatter15 .splat in the capture's S3 folder.
+export function deliverySplatUrl(
+  c: Pick<Capture, "folder_path" | "file" | "spz_url">
+): string | undefined {
+  if (SPZ_RENDERING_ENABLED && c.spz_url) return c.spz_url;
+  if (c.folder_path) return `${c.folder_path}/output.splat`;
+  return c.file ?? undefined;
 }

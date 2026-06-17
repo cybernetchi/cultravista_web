@@ -4,14 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { WebScanCard } from "./WebScanCard";
 import { Scan } from "@/types/scan";
-import { CaptureService, Capture } from "@/services/captureService";
+import { CaptureService, Capture, deliverySplatUrl } from "@/services/captureService";
 import { cn } from "@/lib/utils";
 
 // Convert database capture to Scan type
 function captureToScan(capture: Capture): Scan {
   const folderPath = capture.folder_path || undefined;
-  const splatUrl = folderPath ? `${folderPath}/output.splat` : undefined;
-  
+  const splatUrl = deliverySplatUrl(capture);
+
   return {
     id: capture.id,
     title: capture.title,
@@ -37,6 +37,8 @@ function captureToScan(capture: Capture): Scan {
     location: capture.location_text || undefined,
     published: capture.published,
     slug: capture.slug,
+    plyUrl: capture.ply_url,
+    spzUrl: capture.spz_url,
   };
 }
 

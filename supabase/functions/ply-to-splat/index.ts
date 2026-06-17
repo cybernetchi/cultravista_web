@@ -37,9 +37,15 @@ async function processConversion(s3Url: string, captureId: string) {
       throw new Error(data.error || `Lambda returned status ${response.status}`);
     }
 
-    // Extract folder_path and splat URL from Lambda response
+    // Lambda output contract (PR5):
+    //   { folder_path: string, files: { splat: string, ply?: string, spz?: string } }
+    // `splat` is the antimatter15 delivery file (current default). When the
+    // conversion Lambda is upgraded to also emit `ply` (archival original) and
+    // `spz` (compact delivery), they are persisted here automatically.
     const folderPath = data.folder_path;
     const splatUrl = data.files?.splat;
+    const plyUrl = data.files?.ply ?? null;
+    const spzUrl = data.files?.spz ?? null;
 
     if (!folderPath && !splatUrl) {
       throw new Error('No folder_path or splat URL in Lambda response');
@@ -51,6 +57,8 @@ async function processConversion(s3Url: string, captureId: string) {
       .update({
         folder_path: folderPath || (splatUrl ? splatUrl.replace('/output.splat', '') : null),
         file: splatUrl || null,
+        ply_url: plyUrl, // archival original (null until Lambda emits it)
+        spz_url: spzUrl, // SPZ delivery (null until Lambda emits it)
         status: 1, // Complete
       })
       .eq('id', captureId);

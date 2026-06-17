@@ -88,10 +88,12 @@ export type Database = {
           location_text: string | null
           org_id: string | null
           owner_id: string | null
+          ply_url: string | null
           published: boolean
           rights_license: string | null
           serialize: string | null
           slug: string | null
+          spz_url: string | null
           source: string
           status: number
           tags: string[]
@@ -114,10 +116,12 @@ export type Database = {
           location_text?: string | null
           org_id?: string | null
           owner_id?: string | null
+          ply_url?: string | null
           published?: boolean
           rights_license?: string | null
           serialize?: string | null
           slug?: string | null
+          spz_url?: string | null
           source?: string
           status?: number
           tags?: string[]
@@ -140,10 +144,12 @@ export type Database = {
           location_text?: string | null
           org_id?: string | null
           owner_id?: string | null
+          ply_url?: string | null
           published?: boolean
           rights_license?: string | null
           serialize?: string | null
           slug?: string | null
+          spz_url?: string | null
           source?: string
           status?: number
           tags?: string[]

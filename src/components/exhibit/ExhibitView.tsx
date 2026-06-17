@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GaussianSplatViewer } from "@/components/web/GaussianSplatViewer";
-import type { Capture } from "@/services/captureService";
+import { deliverySplatUrl, type Capture } from "@/services/captureService";
 import type { Annotation } from "@/types/scan";
 
 interface ExhibitViewProps {
@@ -29,7 +29,7 @@ export function ExhibitView({ capture, annotations, embed = false }: ExhibitView
   const [tourIndex, setTourIndex] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const splatUrl = capture.folder_path ? `${capture.folder_path}/output.splat` : undefined;
+  const splatUrl = deliverySplatUrl(capture);
 
   const hasZh = Boolean(
     capture.title_zh_hant ||
