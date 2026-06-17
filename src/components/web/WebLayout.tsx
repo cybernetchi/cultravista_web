@@ -5,6 +5,7 @@ import { WebLibraryView } from "./WebLibraryView";
 import { WebDetailPanel } from "./WebDetailPanel";
 import { WebEditModal } from "./WebEditModal";
 import { WebAnnotateModal } from "./WebAnnotateModal";
+import { WebCropModal } from "./WebCropModal";
 import { WebCreateModal } from "./WebCreateModal";
 import { WebProfileView } from "./WebProfileView";
 import { WebSettingsView } from "./WebSettingsView";
@@ -98,6 +99,7 @@ export function WebLayout() {
               onClose={handleCloseScan}
               onEdit={() => setViewMode("edit")}
               onAnnotate={() => setViewMode("annotate")}
+              onCrop={() => setViewMode("crop")}
             />
           )}
         </div>
@@ -124,6 +126,17 @@ export function WebLayout() {
           scan={selectedScan}
           onClose={() => setViewMode("detail")}
           onSave={handleSave}
+        />
+      )}
+
+      {viewMode === "crop" && selectedScan && (
+        <WebCropModal
+          scan={selectedScan}
+          onClose={() => setViewMode("detail")}
+          onSave={handleSave}
+          onModelReplaced={(url) =>
+            setSelectedScan((s) => (s ? { ...s, splatUrl: url } : s))
+          }
         />
       )}
     </div>

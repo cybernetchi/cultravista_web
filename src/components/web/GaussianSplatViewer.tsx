@@ -23,8 +23,8 @@ interface GaussianSplatViewerProps {
   title?: string;
   /** Hotspots to render as markers. */
   annotations?: Annotation[];
-  /** "edit" enables click-to-place; "view" is read-only. */
-  mode?: "view" | "edit";
+  /** "edit" enables click-to-place; "crop" shows the crop box; "view" is read-only. */
+  mode?: "view" | "edit" | "crop";
   selectedId?: string | null;
   onSelectAnnotation?: (id: string) => void;
   /** Called in edit mode when the user clicks the object to drop a marker. */
@@ -33,13 +33,15 @@ interface GaussianSplatViewerProps {
   tourIndex?: number | null;
   /** Receives the current camera pose (for "set camera view"). */
   onCameraPoseRef?: (getter: () => Annotation["cameraPose"]) => void;
+  /** Crop mode: the live wireframe box to draw (rendered-space min/max). */
+  cropBox?: { min: [number, number, number]; max: [number, number, number] } | null;
 }
 
 // Remote (http) splats must be loaded through the Supabase `proxy` edge function:
 // S3 serves the file but without an Access-Control-Allow-Origin header, so a
 // direct browser fetch is blocked by CORS. The proxy re-serves it with CORS
 // headers. Same-origin/relative URLs (e.g. local sample splats) pass through.
-function resolveSplatUrl(src: string): string {
+export function resolveSplatUrl(src: string): string {
   if (/^https?:\/\//i.test(src)) {
     const supabaseUrl =
       import.meta.env.VITE_SUPABASE_URL || "https://gwtfkqkcvdqpccyglaff.supabase.co";
@@ -453,6 +455,25 @@ function CameraPoseProbe({
   return null;
 }
 
+// A live, controlled wireframe crop box (rendered-space min/max). Non-
+// interactive in the scene — the modal sizes it with sliders, so there's no
+// gizmo/orbit conflict. Drawn slightly inflated and depth-test-off so it's
+// visible through the splat.
+function CropBoxWire({ box }: { box: { min: [number, number, number]; max: [number, number, number] } }) {
+  const cx = (box.min[0] + box.max[0]) / 2;
+  const cy = (box.min[1] + box.max[1]) / 2;
+  const cz = (box.min[2] + box.max[2]) / 2;
+  const sx = Math.max(1e-3, box.max[0] - box.min[0]);
+  const sy = Math.max(1e-3, box.max[1] - box.min[1]);
+  const sz = Math.max(1e-3, box.max[2] - box.min[2]);
+  return (
+    <mesh position={[cx, cy, cz]} scale={[sx, sy, sz]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial color="#39FF14" wireframe transparent opacity={0.7} depthTest={false} />
+    </mesh>
+  );
+}
+
 function SplatScene({
   src,
   annotations,
@@ -462,15 +483,17 @@ function SplatScene({
   onPlacePoint,
   tourIndex,
   onCameraPoseRef,
+  cropBox,
 }: {
   src: string;
   annotations: Annotation[];
-  mode: "view" | "edit";
+  mode: "view" | "edit" | "crop";
   selectedId?: string | null;
   onSelectAnnotation?: (id: string) => void;
   onPlacePoint?: (p: [number, number, number]) => void;
   tourIndex?: number | null;
   onCameraPoseRef?: (getter: () => Annotation["cameraPose"]) => void;
+  cropBox?: { min: [number, number, number]; max: [number, number, number] } | null;
 }) {
   // Route remote splats through the CORS-enabling proxy before loading/parsing.
   const loadUrl = resolveSplatUrl(src);
@@ -502,7 +525,10 @@ function SplatScene({
       {mode === "edit" && onPlacePoint && (
         <PlacementPicker bounds={bounds} points={points} onPlace={onPlacePoint} />
       )}
-      <Markers annotations={annotations} selectedId={selectedId} onSelect={onSelectAnnotation} />
+      {mode === "crop" && cropBox && <CropBoxWire box={cropBox} />}
+      {mode !== "crop" && (
+        <Markers annotations={annotations} selectedId={selectedId} onSelect={onSelectAnnotation} />
+      )}
     </>
   );
 }
@@ -528,6 +554,7 @@ export function GaussianSplatViewer({
   onPlacePoint,
   tourIndex = null,
   onCameraPoseRef,
+  cropBox,
 }: GaussianSplatViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -582,6 +609,7 @@ export function GaussianSplatViewer({
             onPlacePoint={onPlacePoint}
             tourIndex={tourIndex}
             onCameraPoseRef={onCameraPoseRef}
+            cropBox={cropBox}
           />
         </Canvas>
       </div>

@@ -18,7 +18,8 @@ import {
   Play,
   ChevronLeft,
   ChevronRight,
-  MapPin as MapPinIcon
+  MapPin as MapPinIcon,
+  Crop
 } from "lucide-react";
 // (MoreHorizontal removed with the fake stats/actions cleanup)
 import { Button } from "@/components/ui/button";
@@ -43,9 +44,10 @@ interface WebDetailPanelProps {
   onClose: () => void;
   onEdit: () => void;
   onAnnotate: () => void;
+  onCrop: () => void;
 }
 
-export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailPanelProps) {
+export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate, onCrop }: WebDetailPanelProps) {
   const [viewMode, setViewMode] = useState<"image" | "3d">(scan.splatUrl ? "3d" : "image");
   const [lang, setLang] = useState<"en" | "zh">("en");
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
@@ -380,6 +382,15 @@ export function WebDetailPanel({ scan, onClose, onEdit, onAnnotate }: WebDetailP
                 Annotate
               </Button>
             </div>
+            <Button
+              variant="captureOutline"
+              className="w-full gap-2"
+              onClick={onCrop}
+              disabled={!scan.splatUrl}
+            >
+              <Crop className="w-4 h-4" />
+              Crop & Clean Up
+            </Button>
             <div className="grid grid-cols-2 gap-2">
               <Dialog>
                 <DialogTrigger asChild>

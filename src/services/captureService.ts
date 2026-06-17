@@ -270,6 +270,9 @@ export function deliverySplatUrl(
   c: Pick<Capture, "folder_path" | "file" | "spz_url">
 ): string | undefined {
   if (SPZ_RENDERING_ENABLED && c.spz_url) return c.spz_url;
+  // `file` wins so an edited/cropped splat overrides the original. For
+  // unedited captures `file` already equals the original output.splat URL.
+  if (c.file) return c.file;
   if (c.folder_path) return `${c.folder_path}/output.splat`;
-  return c.file ?? undefined;
+  return undefined;
 }

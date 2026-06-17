@@ -41,6 +41,6 @@ export interface Annotation {
   orderIndex: number;
 }
 
-export type ViewMode = 'library' | 'detail' | 'edit' | 'annotate' | 'capture';
+export type ViewMode = 'library' | 'detail' | 'edit' | 'annotate' | 'crop' | 'capture';
 
 export type CaptureState = 'idle' | 'pre' | 'capturing' | 'processing' | 'complete';
