@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
+import Exhibit from "./Exhibit";
 
+// Embeddable viewer. With ?slug=… it renders a published exhibit (chromeless);
+// otherwise it falls back to the legacy raw-splat viewer via ?url=….
 export default function IframeViewer() {
+  const slug = new URLSearchParams(window.location.search).get("slug");
+  if (slug) return <Exhibit slug={slug} embed />;
+  return <LegacyRawViewer />;
+}
+
+function LegacyRawViewer() {
   const [urlParam, setUrlParam] = useState<string | null>(null);
 
   useEffect(() => {
@@ -10,7 +19,7 @@ export default function IframeViewer() {
     if (folderPath) {
       // If it's an S3 URL, use our proxy to avoid CORS issues
       if (folderPath.startsWith("http")) {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zlzzjcvgkbwuaaizzrjv.supabase.co";
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://gwtfkqkcvdqpccyglaff.supabase.co";
         setUrlParam(`${supabaseUrl}/functions/v1/proxy?url=${encodeURIComponent(folderPath)}`);
       } else {
         setUrlParam(folderPath);

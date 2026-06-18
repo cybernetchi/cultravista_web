@@ -14,38 +14,313 @@ export type Database = {
   }
   public: {
     Tables: {
+      annotations: {
+        Row: {
+          body: string | null
+          body_zh_hant: string | null
+          camera_pose: Json | null
+          capture_id: string
+          created_at: string
+          id: string
+          order_index: number
+          owner_id: string | null
+          position_x: number
+          position_y: number
+          position_z: number
+          title: string | null
+          title_zh_hant: string | null
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          body_zh_hant?: string | null
+          camera_pose?: Json | null
+          capture_id: string
+          created_at?: string
+          id?: string
+          order_index?: number
+          owner_id?: string | null
+          position_x: number
+          position_y: number
+          position_z: number
+          title?: string | null
+          title_zh_hant?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          body_zh_hant?: string | null
+          camera_pose?: Json | null
+          capture_id?: string
+          created_at?: string
+          id?: string
+          order_index?: number
+          owner_id?: string | null
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          title?: string | null
+          title_zh_hant?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annotations_capture_id_fkey"
+            columns: ["capture_id"]
+            isOneToOne: false
+            referencedRelation: "captures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       captures: {
         Row: {
+          attribution: string | null
+          capture_date: string | null
           created_at: string
+          description: string | null
+          description_zh_hant: string | null
           file: string | null
           folder_path: string | null
           id: string
+          lat: number | null
+          lng: number | null
+          location_text: string | null
+          org_id: string | null
+          owner_id: string | null
+          ply_url: string | null
+          published: boolean
+          rights_license: string | null
           serialize: string | null
+          slug: string | null
+          spz_url: string | null
+          source: string
           status: number
+          tags: string[]
           thumbnail: string | null
           title: string
+          title_zh_hant: string | null
+          updated_at: string
+        }
+        Insert: {
+          attribution?: string | null
+          capture_date?: string | null
+          created_at?: string
+          description?: string | null
+          description_zh_hant?: string | null
+          file?: string | null
+          folder_path?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          location_text?: string | null
+          org_id?: string | null
+          owner_id?: string | null
+          ply_url?: string | null
+          published?: boolean
+          rights_license?: string | null
+          serialize?: string | null
+          slug?: string | null
+          spz_url?: string | null
+          source?: string
+          status?: number
+          tags?: string[]
+          thumbnail?: string | null
+          title: string
+          title_zh_hant?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attribution?: string | null
+          capture_date?: string | null
+          created_at?: string
+          description?: string | null
+          description_zh_hant?: string | null
+          file?: string | null
+          folder_path?: string | null
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          location_text?: string | null
+          org_id?: string | null
+          owner_id?: string | null
+          ply_url?: string | null
+          published?: boolean
+          rights_license?: string | null
+          serialize?: string | null
+          slug?: string | null
+          spz_url?: string | null
+          source?: string
+          status?: number
+          tags?: string[]
+          thumbnail?: string | null
+          title?: string
+          title_zh_hant?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "captures_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      collection_captures: {
+        Row: {
+          capture_id: string
+          collection_id: string
+          created_at: string
+        }
+        Insert: {
+          capture_id: string
+          collection_id: string
+          created_at?: string
+        }
+        Update: {
+          capture_id?: string
+          collection_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_captures_capture_id_fkey"
+            columns: ["capture_id"]
+            isOneToOne: false
+            referencedRelation: "captures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_captures_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "collections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      collections: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          name_zh_hant: string | null
+          org_id: string
+          owner_id: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
-          file?: string | null
-          folder_path?: string | null
+          description?: string | null
           id?: string
-          serialize?: string | null
-          status?: number
-          thumbnail?: string | null
-          title: string
+          name: string
+          name_zh_hant?: string | null
+          org_id: string
+          owner_id?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
-          file?: string | null
-          folder_path?: string | null
+          description?: string | null
           id?: string
-          serialize?: string | null
-          status?: number
-          thumbnail?: string | null
-          title?: string
+          name?: string
+          name_zh_hant?: string | null
+          org_id?: string
+          owner_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collections_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      memberships: {
+        Row: {
+          created_at: string
+          id: string
+          org_id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_id: string
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memberships_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          is_personal: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_personal?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_personal?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
           updated_at?: string
         }
         Relationships: []
@@ -55,7 +330,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_org_admin: {
+        Args: { org: string }
+        Returns: boolean
+      }
+      is_org_member: {
+        Args: { org: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

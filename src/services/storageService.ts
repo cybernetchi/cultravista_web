@@ -95,4 +95,25 @@ export class StorageService {
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
     return this.uploadThumbnail(imageFile, fileName);
   }
+
+  // Upload an edited .splat to Supabase Storage (the `captures` bucket — avoids
+  // the edge-function body-size limit, and authed write is allowed by RLS).
+  static async uploadSplat(blob: Blob, captureId: string): Promise<UploadResult> {
+    try {
+      const path = `edited/${captureId}-${Date.now()}.splat`;
+      const { error } = await supabase.storage
+        .from('captures')
+        .upload(path, blob, { contentType: 'application/octet-stream', upsert: true });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      const { data } = supabase.storage.from('captures').getPublicUrl(path);
+      return { success: true, url: data.publicUrl, key: path };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Splat upload failed',
+      };
+    }
+  }
 }

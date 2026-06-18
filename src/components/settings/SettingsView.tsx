@@ -6,13 +6,17 @@ import {
   Shield, 
   HelpCircle, 
   Info,
-  ChevronRight 
+  ChevronRight,
+  LogOut
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function SettingsView() {
+  const { user, signOut } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   const [offlineMode, setOfflineMode] = useState(false);
@@ -115,6 +119,23 @@ export function SettingsView() {
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* Account / sign out */}
+      <div className="px-5 mt-6">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Account
+        </h2>
+        <div className="bg-card rounded-2xl p-4 flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-muted-foreground">Signed in as</p>
+            <p className="font-medium text-foreground truncate">{user?.email ?? "—"}</p>
+          </div>
+          <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => signOut()}>
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </Button>
         </div>
       </div>
 

@@ -30,3 +30,9 @@ dist-ssr
 temp_auto_push.bat
 temp_interactive_push.bat
 branch_structure.json
+
+# Local sample splats for testing (large binaries, not part of the app)
+public/splat/samples/
+
+# Supabase CLI local artifacts
+supabase/.temp/
