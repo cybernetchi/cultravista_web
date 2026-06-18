@@ -74,14 +74,6 @@ export function WebCropModal({ scan, onClose, onSave, onModelReplaced }: WebCrop
     if (defaultBox && !box) setBox(defaultBox);
   }, [defaultBox, box]);
 
-  // Slider range = center ± 3× core radius (room to expand past the object,
-  // without spanning the entire far background).
-  const range = useMemo(() => {
-    if (!stats) return null;
-    const half = coreRadius * 3;
-    return { center: stats.center, half, step: (2 * half) / 400 };
-  }, [stats, coreRadius]);
-
   const maxRadial =
     removeFloaters && stats
       ? stats.values[1] + (stats.values[0] - stats.values[1]) * floaterStrength[0]
@@ -91,17 +83,6 @@ export function WebCropModal({ scan, onClose, onSave, onModelReplaced }: WebCrop
     if (!buffer) return null;
     return countKept(buffer, { box: box ?? undefined, maxRadial });
   }, [buffer, box, maxRadial]);
-
-  const setAxis = (axis: 0 | 1 | 2, lo: number, hi: number) => {
-    setBox((b) => {
-      if (!b) return b;
-      const min = [...b.min] as Vec3;
-      const max = [...b.max] as Vec3;
-      min[axis] = lo;
-      max[axis] = hi;
-      return { min, max };
-    });
-  };
 
   const handleApply = async () => {
     if (!buffer) {
@@ -151,8 +132,6 @@ export function WebCropModal({ scan, onClose, onSave, onModelReplaced }: WebCrop
     onSave();
   };
 
-  const axisLabels = ["X (left–right)", "Y (down–up)", "Z (back–front)"];
-
   return (
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex animate-fade-in">
       {/* Left panel */}
@@ -174,25 +153,10 @@ export function WebCropModal({ scan, onClose, onSave, onModelReplaced }: WebCrop
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Drag the handles to tighten the green box around the artifact. Everything outside is removed.
+              Drag the green handles on the box in the 3D view to tighten it around
+              the artifact. Everything outside the box is removed.
             </p>
-            {box && range ? (
-              ([0, 1, 2] as const).map((axis) => (
-                <div key={axis} className="space-y-1.5">
-                  <span className="text-xs text-muted-foreground">{axisLabels[axis]}</span>
-                  <Slider
-                    value={[box.min[axis], box.max[axis]]}
-                    min={range.center[axis] - range.half}
-                    max={range.center[axis] + range.half}
-                    step={range.step}
-                    minStepsBetweenThumbs={1}
-                    onValueChange={([lo, hi]) => setAxis(axis, lo, hi)}
-                  />
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">Loading…</p>
-            )}
+            {!box && <p className="text-xs text-muted-foreground">Loading…</p>}
           </div>
 
           {/* Floater removal */}
@@ -255,6 +219,7 @@ export function WebCropModal({ scan, onClose, onSave, onModelReplaced }: WebCrop
             className="w-full h-full"
             mode="crop"
             cropBox={box}
+            onCropBoxChange={setBox}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">

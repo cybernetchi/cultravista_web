@@ -1,5 +1,5 @@
 import { Canvas, useThree, useFrame, ThreeEvent } from "@react-three/fiber";
-import { Splat, OrbitControls, PerspectiveCamera, Html } from "@react-three/drei";
+import { Splat, OrbitControls, PerspectiveCamera, Html, Billboard } from "@react-three/drei";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Vector3,
@@ -10,6 +10,10 @@ import {
   Scene,
   WebGLRenderTarget,
   Color,
+  EdgesGeometry,
+  BoxGeometry,
+  Vector2,
+  DoubleSide,
 } from "three";
 import { Button } from "@/components/ui/button";
 import { Maximize2, Minimize2, Move3D, Eye, ZoomIn, Loader2 } from "lucide-react";
@@ -33,8 +37,10 @@ interface GaussianSplatViewerProps {
   tourIndex?: number | null;
   /** Receives the current camera pose (for "set camera view"). */
   onCameraPoseRef?: (getter: () => Annotation["cameraPose"]) => void;
-  /** Crop mode: the live wireframe box to draw (rendered-space min/max). */
+  /** Crop mode: the live box to draw (rendered-space min/max). */
   cropBox?: { min: [number, number, number]; max: [number, number, number] } | null;
+  /** Crop mode: called when a face handle is dragged to resize the box. */
+  onCropBoxChange?: (b: { min: [number, number, number]; max: [number, number, number] }) => void;
 }
 
 // Remote (http) splats must be loaded through the Supabase `proxy` edge function:
@@ -455,22 +461,226 @@ function CameraPoseProbe({
   return null;
 }
 
-// A live, controlled wireframe crop box (rendered-space min/max). Non-
-// interactive in the scene — the modal sizes it with sliders, so there's no
-// gizmo/orbit conflict. Drawn slightly inflated and depth-test-off so it's
-// visible through the splat.
-function CropBoxWire({ box }: { box: { min: [number, number, number]; max: [number, number, number] } }) {
+// Crisp 12-edge wireframe geometry for a unit cube (reused, just scaled). Plain
+// `wireframe` on a BoxGeometry shows the triangulation diagonals; EdgesGeometry
+// gives clean box edges.
+const UNIT_BOX_EDGES = new EdgesGeometry(new BoxGeometry(1, 1, 1));
+
+type Vec3 = [number, number, number];
+
+// Draw the whole gizmo on top of the splat regardless of camera angle. The box
+// and the splat are both transparent and co-located, so three's back-to-front
+// distance sort flips between them as you orbit — at some angles the splat would
+// draw last and hide the box. A high renderOrder + depthTest:false pins the
+// gizmo to draw last, always visible.
+const GIZMO_RENDER_ORDER = 1000;
+
+// One crop face: which axis/side it bounds, plus the transform that orients a
+// unit plane (default normal +Z) to lie flat on that face, sized to the box.
+interface CropFace {
+  key: string;
+  axis: 0 | 1 | 2;
+  side: 0 | 1;
+  pos: Vec3;
+  rot: Vec3;
+  /** In-plane size of the face quad. */
+  planeScale: [number, number];
+}
+
+// An interactive crop-box gizmo (rendered-space min/max), modelled on Luma's:
+// a translucent fill + crisp edges + a square handle on every face. Hovering or
+// dragging a handle highlights that whole face; dragging slides it along its
+// axis and reports the new box up via `onChange`. Orbit is suspended mid-drag.
+function CropBoxGizmo({
+  box,
+  bounds,
+  onChange,
+}: {
+  box: { min: Vec3; max: Vec3 };
+  bounds: SplatBounds | null;
+  onChange?: (b: { min: Vec3; max: Vec3 }) => void;
+}) {
+  const gl = useThree((s) => s.gl);
+  const camera = useThree((s) => s.camera);
+  const raycaster = useThree((s) => s.raycaster);
+  const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+
+  // Latest box for the window drag listeners (closures would otherwise go stale).
+  const boxRef = useRef(box);
+  boxRef.current = box;
+
   const cx = (box.min[0] + box.max[0]) / 2;
   const cy = (box.min[1] + box.max[1]) / 2;
   const cz = (box.min[2] + box.max[2]) / 2;
   const sx = Math.max(1e-3, box.max[0] - box.min[0]);
   const sy = Math.max(1e-3, box.max[1] - box.min[1]);
   const sz = Math.max(1e-3, box.max[2] - box.min[2]);
+
+  // Scene-relative sizes so handles/thickness stay sensible at any zoom.
+  const sceneR = bounds?.radius ?? Math.max(sx, sy, sz);
+  const minThick = sceneR * 0.02;
+
+  // Begin an axis-constrained drag of one face. We track the pointer on the
+  // window (not the handle mesh) so the drag survives the cursor leaving it.
+  const startDrag = (face: CropFace) => (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    if (!onChange) return;
+    setDragging(face.key);
+    if (controls) controls.enabled = false;
+    gl.domElement.style.cursor = "grabbing";
+    const { axis, side } = face;
+
+    const onMove = (ev: PointerEvent) => {
+      const rect = gl.domElement.getBoundingClientRect();
+      const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(new Vector2(ndcX, ndcY), camera);
+      const ray = raycaster.ray;
+
+      const b = boxRef.current;
+      // Reference point P = the current face centre; the face slides along axis n.
+      const P: Vec3 = [
+        (b.min[0] + b.max[0]) / 2,
+        (b.min[1] + b.max[1]) / 2,
+        (b.min[2] + b.max[2]) / 2,
+      ];
+      P[axis] = side === 0 ? b.min[axis] : b.max[axis];
+
+      // Closest point between the pointer ray and the axis line through P:
+      // solve for the offset t along the unit axis n. (Standard line–line
+      // closest-point reduction with n a unit vector, so a = e = 1.)
+      const O = ray.origin;
+      const D = ray.direction; // normalised
+      const rx = O.x - P[0], ry = O.y - P[1], rz = O.z - P[2];
+      const bDotN = axis === 0 ? D.x : axis === 1 ? D.y : D.z;
+      const dDotR = D.x * rx + D.y * ry + D.z * rz;
+      const nDotR = axis === 0 ? rx : axis === 1 ? ry : rz;
+      const denom = 1 - bDotN * bDotN;
+      if (Math.abs(denom) < 1e-4) return; // ray ~parallel to axis: ignore
+      const t = (nDotR - bDotN * dDotR) / denom;
+      const coord = P[axis] + t;
+
+      const next = { min: [...b.min] as Vec3, max: [...b.max] as Vec3 };
+      if (side === 0) next.min[axis] = Math.min(coord, b.max[axis] - minThick);
+      else next.max[axis] = Math.max(coord, b.min[axis] + minThick);
+      onChange(next);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setDragging(null);
+      if (controls) controls.enabled = true;
+      gl.domElement.style.cursor = "";
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  // The six faces. `rot` orients a unit XY plane (normal +Z) onto each face;
+  // `planeScale` is the face's in-plane extent.
+  const faces: CropFace[] = [
+    { key: "x0", axis: 0, side: 0, pos: [box.min[0], cy, cz], rot: [0, -Math.PI / 2, 0], planeScale: [sz, sy] },
+    { key: "x1", axis: 0, side: 1, pos: [box.max[0], cy, cz], rot: [0, Math.PI / 2, 0], planeScale: [sz, sy] },
+    { key: "y0", axis: 1, side: 0, pos: [cx, box.min[1], cz], rot: [Math.PI / 2, 0, 0], planeScale: [sx, sz] },
+    { key: "y1", axis: 1, side: 1, pos: [cx, box.max[1], cz], rot: [-Math.PI / 2, 0, 0], planeScale: [sx, sz] },
+    { key: "z0", axis: 2, side: 0, pos: [cx, cy, box.min[2]], rot: [0, Math.PI, 0], planeScale: [sx, sy] },
+    { key: "z1", axis: 2, side: 1, pos: [cx, cy, box.max[2]], rot: [0, 0, 0], planeScale: [sx, sy] },
+  ];
+
   return (
-    <mesh position={[cx, cy, cz]} scale={[sx, sy, sz]}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshBasicMaterial color="#39FF14" wireframe transparent opacity={0.7} depthTest={false} />
-    </mesh>
+    <group>
+      {/* Translucent fill (non-pickable, so it never blocks handles or orbit). */}
+      <mesh
+        position={[cx, cy, cz]}
+        scale={[sx, sy, sz]}
+        raycast={() => null}
+        renderOrder={GIZMO_RENDER_ORDER}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial
+          color="#39FF14"
+          transparent
+          opacity={0.05}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Crisp edges. */}
+      <lineSegments
+        geometry={UNIT_BOX_EDGES}
+        position={[cx, cy, cz]}
+        scale={[sx, sy, sz]}
+        raycast={() => null}
+        renderOrder={GIZMO_RENDER_ORDER + 1}
+      >
+        <lineBasicMaterial color="#39FF14" transparent opacity={0.95} depthTest={false} />
+      </lineSegments>
+
+      {/* Per-face: full-face highlight (flat on the face) + a camera-facing
+          square grab handle, so handles never collapse to a sliver edge-on. */}
+      {onChange &&
+        faces.map((f) => {
+          const active = dragging === f.key || (!dragging && hovered === f.key);
+          // Uniform, camera-facing handle size (grows a touch when active).
+          const hs = sceneR * (active ? 0.085 : 0.06);
+          return (
+            <group key={f.key}>
+              {/* Whole-face highlight — flat on the face, shown only when active. */}
+              {active && (
+                <mesh
+                  position={f.pos}
+                  rotation={f.rot}
+                  scale={[f.planeScale[0], f.planeScale[1], 1]}
+                  raycast={() => null}
+                  renderOrder={GIZMO_RENDER_ORDER + 1}
+                >
+                  <planeGeometry args={[1, 1]} />
+                  <meshBasicMaterial
+                    color="#39FF14"
+                    transparent
+                    opacity={0.18}
+                    side={DoubleSide}
+                    depthTest={false}
+                    depthWrite={false}
+                  />
+                </mesh>
+              )}
+              {/* Camera-facing square grab handle — the drag target. */}
+              <Billboard position={f.pos}>
+                <mesh
+                  scale={[hs, hs, 1]}
+                  renderOrder={GIZMO_RENDER_ORDER + 2}
+                  onPointerDown={startDrag(f)}
+                  onPointerOver={(e) => {
+                    e.stopPropagation();
+                    setHovered(f.key);
+                    gl.domElement.style.cursor = "grab";
+                  }}
+                  onPointerOut={() => {
+                    setHovered((h) => (h === f.key ? null : h));
+                    if (!dragging) gl.domElement.style.cursor = "";
+                  }}
+                >
+                  <planeGeometry args={[1, 1]} />
+                  <meshBasicMaterial
+                    color={active ? "#ffffff" : "#39FF14"}
+                    transparent
+                    opacity={active ? 1 : 0.9}
+                    side={DoubleSide}
+                    depthTest={false}
+                    depthWrite={false}
+                  />
+                </mesh>
+              </Billboard>
+            </group>
+          );
+        })}
+    </group>
   );
 }
 
@@ -484,6 +694,7 @@ function SplatScene({
   tourIndex,
   onCameraPoseRef,
   cropBox,
+  onCropBoxChange,
 }: {
   src: string;
   annotations: Annotation[];
@@ -494,6 +705,7 @@ function SplatScene({
   tourIndex?: number | null;
   onCameraPoseRef?: (getter: () => Annotation["cameraPose"]) => void;
   cropBox?: { min: [number, number, number]; max: [number, number, number] } | null;
+  onCropBoxChange?: (b: { min: [number, number, number]; max: [number, number, number] }) => void;
 }) {
   // Route remote splats through the CORS-enabling proxy before loading/parsing.
   const loadUrl = resolveSplatUrl(src);
@@ -525,7 +737,9 @@ function SplatScene({
       {mode === "edit" && onPlacePoint && (
         <PlacementPicker bounds={bounds} points={points} onPlace={onPlacePoint} />
       )}
-      {mode === "crop" && cropBox && <CropBoxWire box={cropBox} />}
+      {mode === "crop" && cropBox && (
+        <CropBoxGizmo box={cropBox} bounds={bounds} onChange={onCropBoxChange} />
+      )}
       {mode !== "crop" && (
         <Markers annotations={annotations} selectedId={selectedId} onSelect={onSelectAnnotation} />
       )}
@@ -555,6 +769,7 @@ export function GaussianSplatViewer({
   tourIndex = null,
   onCameraPoseRef,
   cropBox,
+  onCropBoxChange,
 }: GaussianSplatViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -610,6 +825,7 @@ export function GaussianSplatViewer({
             tourIndex={tourIndex}
             onCameraPoseRef={onCameraPoseRef}
             cropBox={cropBox}
+            onCropBoxChange={onCropBoxChange}
           />
         </Canvas>
       </div>
